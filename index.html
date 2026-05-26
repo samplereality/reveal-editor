@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- CSP must be the first non-charset element in <head> so it applies to all
+     subsequent resource loads. Mirrors what .htaccess sends on Apache hosts;
+     this meta tag is what enforces it on static hosts like GitHub Pages. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reveal Editor</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>Reveal Editor</strong>
+    <input id="deck-title" type="text" aria-label="Presentation title" placeholder="Untitled presentation">
+  </div>
+  <div class="topbar-actions">
+    <label class="field">
+      Theme
+      <select id="theme-select">
+        <option value="black">black</option>
+        <option value="white">white</option>
+        <option value="league">league</option>
+        <option value="beige">beige</option>
+        <option value="sky">sky</option>
+        <option value="night">night</option>
+        <option value="serif">serif</option>
+        <option value="simple">simple</option>
+        <option value="solarized">solarized</option>
+        <option value="blood">blood</option>
+        <option value="moon">moon</option>
+      </select>
+    </label>
+    <button id="btn-preview" type="button" title="Preview from start (P)">Preview</button>
+    <button id="btn-preview-here" type="button" title="Preview starting from the current slide (Shift+P)">Preview from Here</button>
+    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
+    <button id="btn-export-html" type="button">Export HTML</button>
+    <button id="btn-projects" type="button" title="Manage saved projects">Projects…</button>
+    <button id="btn-new" type="button" title="New deck">+ New</button>
+    <span id="status" class="status"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <span>Slides</span>
+      <button id="btn-add-slide" type="button" title="Add slide">+</button>
+    </div>
+    <ol id="slide-list" class="slide-list"></ol>
+  </aside>
+
+  <section class="editor">
+    <div class="toolbar" id="toolbar">
+      <button type="button" data-cmd="formatBlock" data-arg="h1" title="Heading 1">H1</button>
+      <button type="button" data-cmd="formatBlock" data-arg="h2" title="Heading 2">H2</button>
+      <button type="button" data-cmd="formatBlock" data-arg="h3" title="Heading 3">H3</button>
+      <button type="button" data-cmd="formatBlock" data-arg="p" title="Paragraph">P</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="bold" title="Bold (Ctrl/Cmd+B)"><b>B</b></button>
+      <button type="button" data-cmd="italic" title="Italic (Ctrl/Cmd+I)"><i>I</i></button>
+      <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+      <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">&bull; List</button>
+      <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+      <button type="button" data-action="blockquote" title="Blockquote">&ldquo; &rdquo;</button>
+      <button type="button" data-action="code-inline" title="Inline code">&lt;/&gt;</button>
+      <button type="button" data-action="code-block" title="Code block">{ }</button>
+      <span class="sep"></span>
+      <button type="button" data-action="link" title="Link">Link</button>
+      <button type="button" data-action="image" title="Insert image">Image</button>
+      <button type="button" data-action="hr" title="Horizontal rule">HR</button>
+      <span class="sep"></span>
+      <button type="button" data-action="fit-text" title="Fit text to slide (r-fit-text)">Fit</button>
+      <button type="button" data-action="stretch" title="Stretch to fill slide (r-stretch)">Stretch</button>
+      <span class="sep"></span>
+      <select id="fragment-type" class="toolbar-select" title="Fragment animation">
+        <option value="">fade-in</option>
+        <option value="fade-out">fade-out</option>
+        <option value="fade-up">fade-up</option>
+        <option value="fade-down">fade-down</option>
+        <option value="fade-left">fade-left</option>
+        <option value="fade-right">fade-right</option>
+        <option value="fade-in-then-out">fade-in-then-out</option>
+        <option value="fade-in-then-semi-out">fade-in-then-semi-out</option>
+        <option value="grow">grow</option>
+        <option value="shrink">shrink</option>
+        <option value="strike">strike</option>
+        <option value="highlight-red">highlight-red</option>
+        <option value="highlight-green">highlight-green</option>
+        <option value="highlight-blue">highlight-blue</option>
+        <option value="highlight-current-red">highlight-current-red</option>
+      </select>
+      <button type="button" data-action="fragment" title="Toggle fragment on current block, or wrap selection. Click again to remove.">Fragment</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+      <button type="button" id="toggle-source" title="Toggle HTML source">&lt;/&gt; Source</button>
+    </div>
+
+    <div class="stage">
+      <div class="slide-frame" id="slide-frame">
+        <div id="slide-editor" class="slide-editor" contenteditable="true" spellcheck="true"></div>
+        <textarea id="slide-source" class="slide-source" spellcheck="false" hidden></textarea>
+        <div id="drop-overlay" class="drop-overlay" hidden>Drop image to embed</div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <label class="field">
+        Transition
+        <select id="slide-transition">
+          <option value="">(default)</option>
+          <option value="none">none</option>
+          <option value="fade">fade</option>
+          <option value="slide">slide</option>
+          <option value="convex">convex</option>
+          <option value="concave">concave</option>
+          <option value="zoom">zoom</option>
+        </select>
+      </label>
+      <label class="field">
+        Background
+        <select id="slide-bg-type">
+          <option value="">(none)</option>
+          <option value="color">color / CSS</option>
+          <option value="image">image URL</option>
+          <option value="video">video URL</option>
+          <option value="iframe">iframe URL</option>
+        </select>
+      </label>
+      <label class="field grow">
+        <span id="slide-bg-label">Value</span>
+        <input id="slide-bg-value" type="text" placeholder="Pick a background type first" disabled />
+      </label>
+      <label class="field checkbox">
+        <input id="slide-vertical" type="checkbox" />
+        <span>Vertical sub-slide</span>
+      </label>
+      <div class="field grow notes-field">
+        <div class="notes-head">
+          <span>Speaker notes</span>
+          <button type="button" id="btn-notes-popout" title="Open notes in a larger editor">⤢ Expand</button>
+        </div>
+        <textarea id="slide-notes" rows="2" placeholder="Notes shown in the speaker view"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <aside id="notes-panel" class="notes-panel" hidden>
+    <div class="notes-panel-head">
+      <strong>Speaker notes — <span id="notes-panel-slide">slide</span></strong>
+      <button type="button" id="notes-panel-close" title="Close notes panel" aria-label="Close notes panel">×</button>
+    </div>
+    <textarea id="notes-panel-text" placeholder="Notes shown in the speaker view (press S during a presentation)"></textarea>
+  </aside>
+</main>
+
+<div id="preview-modal" class="modal" hidden>
+  <div class="modal-head">
+    <strong id="preview-title">Preview</strong>
+    <button type="button" id="preview-close">Close</button>
+  </div>
+  <iframe id="preview-frame" title="Preview"
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+          allowfullscreen></iframe>
+</div>
+
+<div id="projects-modal" class="modal projects-modal" hidden>
+  <div class="modal-head">
+    <strong>Projects</strong>
+    <button type="button" id="projects-close">Close</button>
+  </div>
+  <div class="projects-body">
+    <div class="projects-toolbar">
+      <button type="button" id="projects-new">+ New project</button>
+      <button type="button" id="projects-export-all">Export all (.zip)</button>
+      <label class="projects-import">
+        <span>Import .json or .zip…</span>
+        <input id="projects-import-input" type="file" accept="application/json,.json,application/zip,.zip" multiple hidden>
+      </label>
+    </div>
+    <ul id="projects-list" class="projects-list" aria-label="Saved projects"></ul>
+  </div>
+</div>
+
+<input id="file-input" type="file" accept="image/*" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
+        integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
+        crossorigin="anonymous"></script>
+<script src="app.js"></script>
+</body>
+</html>
