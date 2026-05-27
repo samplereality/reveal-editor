@@ -40,6 +40,7 @@
     <button id="btn-new" type="button" title="New deck">+ New</button>
     <span id="status" class="status"></span>
   </div>
+  <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings">⚙</button>
   <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
 </header>
 
@@ -189,6 +190,22 @@
       </label>
     </div>
     <ul id="projects-list" class="projects-list" aria-label="Saved projects"></ul>
+  </div>
+</div>
+
+<div id="settings-modal" class="modal settings-modal" hidden>
+  <div class="settings-card">
+    <div class="modal-head">
+      <strong>Reveal.js Settings</strong>
+      <button type="button" id="settings-close">Close</button>
+    </div>
+    <div class="settings-body">
+      <p class="settings-intro">These options are passed to <code>Reveal.initialize</code> for this deck. They apply to both the preview and the exported HTML/PDF. <a href="https://revealjs.com/config/" target="_blank" rel="noopener noreferrer">Full reference →</a></p>
+      <form id="settings-form" class="settings-form"></form>
+      <div class="settings-actions">
+        <button type="button" id="settings-reset" class="danger">Reset to defaults</button>
+      </div>
+    </div>
   </div>
 </div>
 

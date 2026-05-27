@@ -17,6 +17,7 @@ A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentatio
 - **Backgrounds.** Per-slide color, image, video, or iframe backgrounds. URLs only — no embedding required.
 - **Vertical sub-slides.** Check "Vertical sub-slide" to nest under the previous one; reveal will lay them out as a vertical group.
 - **Speaker notes side panel.** Opens to the right of the slide so you can see the slide and notes at the same time. Notes also appear in the deck's reveal speaker view (press `S` during a preview).
+- **Reveal.js settings, per deck.** A **Settings…** button in the topbar opens a modal with a curated set of [reveal.js config options](https://revealjs.com/config/) (controls, progress, slide numbering, default transition, auto-advance, slide dimensions, etc.). Settings are stored on the project, travel with `.json` export/import, and apply to the live preview, the standalone HTML export, and the PDF export.
 - **Multiple projects** with a Projects modal — open, duplicate, rename, delete, or export any of them.
 - **Import / Export.** Every saved project gets four per-row export buttons in the Projects modal:
   - **`.json`** — re-importable project file (preserves everything, including backgrounds, transitions, and fragments).

@@ -51,6 +51,11 @@
     aboutButton: $('#btn-about'),
     aboutModal: $('#about-modal'),
     aboutClose: $('#about-close'),
+    settingsButton: $('#btn-settings'),
+    settingsModal: $('#settings-modal'),
+    settingsClose: $('#settings-close'),
+    settingsForm: $('#settings-form'),
+    settingsReset: $('#settings-reset'),
     themeToggle: $('#btn-theme-toggle'),
     notesPopout: $('#btn-notes-popout'),
     notesPanel: $('#notes-panel'),
@@ -114,6 +119,7 @@
       theme: 'black',
       slides: [first],
       currentId: first.id,
+      config: defaultRevealConfig(),
     };
   }
 
@@ -128,6 +134,8 @@
     if (!p.title) p.title = fallbackName || 'Untitled presentation';
     if (!p.name) p.name = p.title;
     if (!p.theme) p.theme = 'black';
+    if (!p.config || typeof p.config !== 'object') p.config = defaultRevealConfig();
+    else p.config = { ...defaultRevealConfig(), ...p.config };
     const now = Date.now();
     if (!p.createdAt) p.createdAt = now;
     if (!p.modifiedAt) p.modifiedAt = now;
@@ -1351,7 +1359,9 @@
     const notesJs = `${cdn}/plugin/notes/notes.js`;
 
     const sections = buildSections(project.slides);
-    const initOpts = `{ hash: ${standalone ? 'true' : 'false'}, controls: true, progress: true, plugins: [RevealNotes] }`;
+    const cfg = { ...defaultRevealConfig(), ...(project.config || {}), hash: !!standalone };
+    const cfgJson = JSON.stringify(cfg);
+    const initOpts = `Object.assign(${cfgJson}, { plugins: [RevealNotes] })`;
     const startCall = startAt
       ? `.then(() => Reveal.slide(${startAt[0]}, ${startAt[1]}))`
       : '';
@@ -1436,6 +1446,7 @@ ${sections}
       title: state.title || 'Presentation',
       sections: buildSections(state.slides),
       start: startAt,
+      config: { ...defaultRevealConfig(), ...(state.config || {}) },
     };
     els.previewTitle.textContent = fromCurrent
       ? `Preview — from slide ${slideNumber(state.slides.findIndex(s => s.id === state.currentId))}`
@@ -1573,6 +1584,7 @@ ${sections}
       title: p.title || p.name || 'Presentation',
       sections: buildSections(p.slides),
       printMode: true,
+      config: { ...defaultRevealConfig(), ...(p.config || {}) },
     };
     try {
       sessionStorage.setItem(PDF_PAYLOAD_KEY, JSON.stringify(payload));
@@ -1749,6 +1761,7 @@ ${sections}
       theme: p.theme,
       slides: p.slides,
       currentId: p.currentId,
+      config: p.config,
     };
   }
 
@@ -2010,6 +2023,155 @@ ${sections}
         && assetMap.has(slide.background.value)) {
       slide.background = { ...slide.background, value: assetMap.get(slide.background.value) };
     }
+  }
+
+  // -------- Reveal.js settings (per-project Reveal.initialize options) --------
+  // Curated subset of https://revealjs.com/config/ — most commonly tweaked
+  // options. Excludes ones we control ourselves (hash, embedded, plugins,
+  // print/PDF) or that don't make sense in this editor's context.
+  const REVEAL_OPTIONS = [
+    { section: 'Navigation' },
+    { key: 'controls', label: 'Show navigation controls', type: 'boolean', default: true },
+    { key: 'progress', label: 'Show progress bar', type: 'boolean', default: true },
+    { key: 'slideNumber', label: 'Slide number', type: 'select', default: false,
+      help: 'Display the current slide number in a corner',
+      options: [
+        { value: false, label: 'Off' },
+        { value: true, label: 'On (h.v / h)' },
+        { value: 'h.v', label: 'h.v' },
+        { value: 'h/v', label: 'h/v' },
+        { value: 'c', label: 'flattened (c)' },
+        { value: 'c/t', label: 'flattened (c/t)' },
+      ] },
+    { key: 'keyboard', label: 'Keyboard navigation', type: 'boolean', default: true },
+    { key: 'touch', label: 'Touch navigation', type: 'boolean', default: true },
+    { key: 'mouseWheel', label: 'Mouse wheel navigation', type: 'boolean', default: false },
+    { key: 'overview', label: 'Overview mode (O key)', type: 'boolean', default: true },
+    { key: 'loop', label: 'Loop slides', type: 'boolean', default: false },
+    { key: 'center', label: 'Vertically center slides', type: 'boolean', default: true },
+    { key: 'rtl', label: 'Right-to-left direction', type: 'boolean', default: false,
+      help: 'Reverses horizontal slide navigation (Arabic, Hebrew, etc.)' },
+    { key: 'navigationMode', label: 'Navigation mode', type: 'select', default: 'default',
+      help: 'How keyboard and controls walk the deck',
+      options: [
+        { value: 'default', label: 'default (horizontal + vertical)' },
+        { value: 'linear', label: 'linear (horizontal only)' },
+        { value: 'grid', label: 'grid (2D navigation)' },
+      ] },
+    { key: 'previewLinks', label: 'Open external links in a preview iframe', type: 'boolean', default: false },
+
+    { section: 'Transitions' },
+    { key: 'transition', label: 'Default slide transition', type: 'select', default: 'slide',
+      options: ['none', 'fade', 'slide', 'convex', 'concave', 'zoom'].map(v => ({ value: v, label: v })) },
+    { key: 'transitionSpeed', label: 'Transition speed', type: 'select', default: 'default',
+      options: ['default', 'fast', 'slow'].map(v => ({ value: v, label: v })) },
+    { key: 'backgroundTransition', label: 'Background transition', type: 'select', default: 'fade',
+      options: ['none', 'fade', 'slide', 'convex', 'concave', 'zoom'].map(v => ({ value: v, label: v })) },
+
+    { section: 'Auto-advance' },
+    { key: 'autoSlide', label: 'Auto-advance interval (ms, 0 = off)', type: 'number', default: 0, min: 0, step: 100 },
+    { key: 'autoSlideStoppable', label: 'Stop auto-advance on user input', type: 'boolean', default: true },
+
+    { section: 'Layout' },
+    { key: 'width', label: 'Slide width (px)', type: 'number', default: 960, min: 200 },
+    { key: 'height', label: 'Slide height (px)', type: 'number', default: 700, min: 200 },
+    { key: 'margin', label: 'Slide margin (0–1)', type: 'number', default: 0.04, min: 0, max: 0.5, step: 0.01 },
+  ];
+
+  function defaultRevealConfig() {
+    const cfg = {};
+    REVEAL_OPTIONS.forEach(opt => { if (opt.key) cfg[opt.key] = opt.default; });
+    return cfg;
+  }
+
+  function openSettingsModal() {
+    renderSettingsForm();
+    els.settingsModal.hidden = false;
+  }
+
+  function closeSettingsModal() {
+    els.settingsModal.hidden = true;
+    endTextEditSession();
+  }
+
+  function renderSettingsForm() {
+    const cfg = state.config || (state.config = defaultRevealConfig());
+    const form = els.settingsForm;
+    form.innerHTML = '';
+    REVEAL_OPTIONS.forEach(opt => {
+      if (opt.section) {
+        const h = document.createElement('h4');
+        h.textContent = opt.section;
+        form.appendChild(h);
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'settings-row';
+      const label = document.createElement('label');
+      label.htmlFor = `cfg-${opt.key}`;
+      label.textContent = opt.label;
+      if (opt.help) {
+        const help = document.createElement('span');
+        help.className = 'help';
+        help.textContent = opt.help;
+        label.appendChild(help);
+      }
+      row.appendChild(label);
+
+      const input = makeConfigInput(opt, cfg[opt.key]);
+      input.id = `cfg-${opt.key}`;
+      input.addEventListener('change', () => {
+        snapshotForTextField('settings');
+        cfg[opt.key] = readConfigInput(opt, input);
+        scheduleSave();
+      });
+      row.appendChild(input);
+      form.appendChild(row);
+    });
+  }
+
+  function makeConfigInput(opt, value) {
+    if (opt.type === 'boolean') {
+      const el = document.createElement('input');
+      el.type = 'checkbox';
+      el.checked = !!value;
+      return el;
+    }
+    if (opt.type === 'select') {
+      const el = document.createElement('select');
+      opt.options.forEach(o => {
+        const option = document.createElement('option');
+        // Stringify value so booleans/numbers survive the round trip.
+        option.value = JSON.stringify(o.value);
+        option.textContent = o.label;
+        if (o.value === value) option.selected = true;
+        el.appendChild(option);
+      });
+      return el;
+    }
+    // number
+    const el = document.createElement('input');
+    el.type = 'number';
+    if (typeof opt.min === 'number') el.min = String(opt.min);
+    if (typeof opt.max === 'number') el.max = String(opt.max);
+    if (typeof opt.step === 'number') el.step = String(opt.step);
+    el.value = value;
+    return el;
+  }
+
+  function readConfigInput(opt, input) {
+    if (opt.type === 'boolean') return input.checked;
+    if (opt.type === 'select') return JSON.parse(input.value);
+    const n = parseFloat(input.value);
+    return Number.isFinite(n) ? n : opt.default;
+  }
+
+  function resetSettings() {
+    if (!confirm('Reset all reveal.js settings for this deck to their defaults?')) return;
+    snapshotForTextField('settings');
+    state.config = defaultRevealConfig();
+    renderSettingsForm();
+    scheduleSave();
   }
 
   // -------- Projects modal --------
@@ -2346,6 +2508,14 @@ ${sections}
       if (e.target === els.aboutModal) els.aboutModal.hidden = true;
     });
 
+    // Settings modal
+    els.settingsButton.addEventListener('click', openSettingsModal);
+    els.settingsClose.addEventListener('click', closeSettingsModal);
+    els.settingsReset.addEventListener('click', resetSettings);
+    els.settingsModal.addEventListener('click', (e) => {
+      if (e.target === els.settingsModal) closeSettingsModal();
+    });
+
     // Projects modal
     els.projectsButton.addEventListener('click', openProjectsModal);
     els.projectsClose.addEventListener('click', closeProjectsModal);
@@ -2382,6 +2552,7 @@ ${sections}
         if (!els.slideMenu.hidden) hideSlideContextMenu();
         else if (!els.previewModal.hidden) closePreview();
         else if (!els.projectsModal.hidden) closeProjectsModal();
+        else if (!els.settingsModal.hidden) closeSettingsModal();
         else if (!els.aboutModal.hidden) els.aboutModal.hidden = true;
         else if (isNotesPanelOpen()) closeNotesPanel();
       }

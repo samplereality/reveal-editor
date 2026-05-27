@@ -44,12 +44,12 @@
     loadScript(cdn + '/dist/reveal.js')
       .then(function () { return loadScript(cdn + '/plugin/notes/notes.js'); })
       .then(function () {
-        var p = Reveal.initialize({
-          hash: false,
-          controls: !payload.printMode,
-          progress: !payload.printMode,
-          plugins: [RevealNotes],
-        });
+        var opts = Object.assign({}, payload.config || {}, { hash: false, plugins: [RevealNotes] });
+        if (payload.printMode) {
+          opts.controls = false;
+          opts.progress = false;
+        }
+        var p = Reveal.initialize(opts);
         if (payload.start) {
           p.then(function () { Reveal.slide(payload.start[0], payload.start[1]); });
         }
