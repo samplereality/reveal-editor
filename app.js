@@ -22,6 +22,8 @@
     toggleSource: $('#toggle-source'),
     toolbar: $('#toolbar'),
     frame: $('#slide-frame'),
+    bgLayer: $('#slide-bg-layer'),
+    bgBadge: $('#slide-bg-badge'),
     dropOverlay: $('#drop-overlay'),
     transition: $('#slide-transition'),
     bgType: $('#slide-bg-type'),
@@ -416,6 +418,51 @@
     els.notes.value = slide.notes || '';
     syncNotesPanel();
     applySlideEffects();
+    applyEditorBackground();
+  }
+
+  // Visualizes the current slide's background in the editor: color/image as
+  // a CSS background on the bg-layer, video/iframe as a real embedded
+  // element, plus a small badge in the corner labeling the type. Without
+  // this, slides with only a background look blank while editing.
+  function applyEditorBackground() {
+    const slide = currentSlide();
+    const layer = els.bgLayer;
+    const badge = els.bgBadge;
+    layer.style.background = '';
+    layer.replaceChildren();
+    badge.hidden = true;
+    badge.textContent = '';
+    if (!slide || !slide.background.type || !slide.background.value) return;
+
+    const { type, value } = slide.background;
+    let label = type;
+    if (type === 'color') {
+      layer.style.background = value;
+    } else if (type === 'image') {
+      const safe = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      layer.style.backgroundImage = `url("${safe}")`;
+    } else if (type === 'video') {
+      const v = document.createElement('video');
+      v.src = value;
+      v.muted = true;
+      v.loop = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      layer.appendChild(v);
+    } else if (type === 'iframe') {
+      const f = document.createElement('iframe');
+      f.src = value;
+      // Same sandbox as the preview iframe — keeps `allow-same-origin` so
+      // Chrome's PDF viewer can render PDF backgrounds in the editor too.
+      f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      f.setAttribute('referrerpolicy', 'no-referrer');
+      layer.appendChild(f);
+    }
+
+    const display = value.length > 80 ? value.slice(0, 77) + '…' : value;
+    badge.textContent = `${label}: ${display}`;
+    badge.hidden = false;
   }
 
   function refreshBgValueField() {
@@ -2012,10 +2059,12 @@ ${sections}
       if (!els.bgType.value) slide.background.value = '';
       refreshBgValueField();
       els.bgValue.value = slide.background.value || '';
+      applyEditorBackground();
       scheduleSave();
     });
     els.bgValue.addEventListener('input', () => {
       currentSlide().background.value = els.bgValue.value;
+      applyEditorBackground();
       scheduleSave();
     });
     els.vertical.addEventListener('change', () => {
