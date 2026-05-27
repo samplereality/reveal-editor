@@ -1167,25 +1167,31 @@ ${sections}
   function showPreview({ fromCurrent = false } = {}) {
     captureCurrentContent();
     const startAt = fromCurrent ? slidePosition(state.currentId) : null;
-    const html = buildDeckHtml({ standalone: false, startAt });
-    els.previewFrame.srcdoc = html;
+    const payload = {
+      type: 'render-deck',
+      version: REVEAL_VERSION,
+      theme: state.theme,
+      title: state.title || 'Presentation',
+      sections: buildSections(state.slides),
+      start: startAt,
+    };
     els.previewTitle.textContent = fromCurrent
       ? `Preview — from slide ${slideNumber(state.slides.findIndex(s => s.id === state.currentId))}`
       : 'Preview';
     els.previewModal.hidden = false;
-    // Hand keyboard focus to the iframe so arrow keys / space navigate
-    // immediately. Done on the iframe's load so reveal's key listeners
-    // are wired up before we focus.
+    // Force a fresh load so reveal.js re-initializes cleanly each time.
     els.previewFrame.addEventListener('load', () => {
       try {
+        els.previewFrame.contentWindow?.postMessage(payload, '*');
         els.previewFrame.contentWindow?.focus();
       } catch {}
     }, { once: true });
+    els.previewFrame.src = 'preview.html?t=' + Date.now();
   }
 
   function closePreview() {
     els.previewModal.hidden = true;
-    els.previewFrame.srcdoc = '';
+    els.previewFrame.removeAttribute('src');
   }
 
   function exportHtml() {

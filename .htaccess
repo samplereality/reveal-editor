@@ -1,0 +1,43 @@
+# reveal-editor — Apache config for shared hosting
+# Drop this in the directory you upload index.html / app.js / styles.css to.
+
+# ----- HTTPS -----
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# ----- Don't list directories or leak dotfiles -----
+Options -Indexes
+RedirectMatch 404 /\.git
+RedirectMatch 404 /\.DS_Store
+RedirectMatch 404 /\.htaccess$
+
+<IfModule mod_headers.c>
+  # ----- Security headers -----
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+  # ----- Content-Security-Policy -----
+  # script-src and style-src include cdn.jsdelivr.net so JSZip + reveal themes
+  # load. style-src also lists fonts.googleapis.com because several reveal
+  # themes do `@import url(https://fonts.googleapis.com/...)` at the top of
+  # their CSS to fetch webfont rules; the font files themselves come from
+  # fonts.gstatic.com (in font-src). If you vendor everything locally, you
+  # can drop the external allowances.
+  # 'unsafe-inline' in style-src is needed because the editor sets inline
+  # style="font-size:..." on r-fit-text and inline style="height:..." on
+  # r-stretch elements.
+  Header always set Content-Security-Policy "default-src 'self'; \
+script-src 'self' https://cdn.jsdelivr.net; \
+style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; \
+img-src 'self' data: https:; \
+media-src 'self' data: https:; \
+font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; \
+frame-src 'self' https:; \
+connect-src 'self' https://cdn.jsdelivr.net; \
+base-uri 'self'; \
+form-action 'self'; \
+object-src 'none'"
+</IfModule>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Scoped CSP for the preview iframe. The iframe is sandboxed by the parent
+     (no allow-same-origin), so a permissive script-src here can't compromise
+     the editor. This mirrors what a standalone reveal.js export needs. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net; base-uri 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview</title>
+<link rel="stylesheet" id="reveal-css">
+<link rel="stylesheet" id="theme-css">
+<style>html, body { margin: 0; height: 100%; background: #000; }</style>
+</head>
+<body>
+<div class="reveal"><div class="slides"></div></div>
+<script src="preview.js"></script>
+</body>
+</html>

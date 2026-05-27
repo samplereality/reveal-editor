@@ -72,7 +72,7 @@ python3 -m http.server 8000
 Slide content is arbitrary HTML — including `<script>` and `<iframe>` because that's what reveal supports. The editor takes two precautions:
 
 - **Previews are sandboxed.** The preview iframe uses `sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"`, which gives it a unique opaque origin. A script inside a slide can't read the editor's IndexedDB, can't touch `window.parent`, can't navigate the host page.
-- **CSP** (in `.htaccess` for Apache, and as a `<meta>` tag for static hosts) restricts what the editor itself can load — its own origin, jsdelivr, and Google Fonts. JSZip is pinned with a subresource-integrity hash.
+- **Two-CSP design.** The editor itself runs under a strict CSP (its own origin, jsdelivr, Google Fonts; no inline scripts). The preview lives in a separate `preview.html` page that's loaded into the sandboxed iframe and gets the deck data via `postMessage` — so its more permissive CSP (needed for arbitrary slide HTML) is isolated from the editor's. The same CSP is enforced via `.htaccess` on Apache hosts and a `<meta>` tag on static hosts. JSZip is pinned with a subresource-integrity hash.
 
 That said: **only import project files from sources you trust.** Imported HTML is rendered with `innerHTML`, and an `<img onerror="...">` inside an imported deck will fire when you preview it. The sandbox limits the blast radius (no access to your library), but the script still runs.
 
@@ -82,7 +82,7 @@ That said: **only import project files from sources you trust.** Imported HTML i
 - [reveal.js 5.1.0](https://revealjs.com) — loaded from jsdelivr at runtime, also referenced in exported decks.
 - [JSZip 3.10.1](https://stuk.github.io/jszip/) — for the `.zip` import/export, pinned via SRI.
 
-The whole editor is three files: `index.html`, `app.js`, `styles.css`. About 1,500 lines of JS for everything you see.
+The editor is five small files: `index.html`, `app.js`, `styles.css` for the editor itself, plus `preview.html` + `preview.js` for the sandboxed preview page. About 1,500 lines of JS for everything you see.
 
 ## License
 
