@@ -43,6 +43,9 @@
     previewFrame: $('#preview-frame'),
     previewClose: $('#preview-close'),
     previewTitle: $('#preview-title'),
+    aboutButton: $('#btn-about'),
+    aboutModal: $('#about-modal'),
+    aboutClose: $('#about-close'),
     themeToggle: $('#btn-theme-toggle'),
     notesPopout: $('#btn-notes-popout'),
     notesPanel: $('#notes-panel'),
@@ -1684,6 +1687,13 @@ ${sections}
       scheduleSave();
     });
 
+    // About modal
+    els.aboutButton.addEventListener('click', () => { els.aboutModal.hidden = false; });
+    els.aboutClose.addEventListener('click', () => { els.aboutModal.hidden = true; });
+    els.aboutModal.addEventListener('click', (e) => {
+      if (e.target === els.aboutModal) els.aboutModal.hidden = true;
+    });
+
     // Projects modal
     els.projectsButton.addEventListener('click', openProjectsModal);
     els.projectsClose.addEventListener('click', closeProjectsModal);
@@ -1707,6 +1717,7 @@ ${sections}
       else if (e.key === 'Escape') {
         if (!els.previewModal.hidden) closePreview();
         else if (!els.projectsModal.hidden) closeProjectsModal();
+        else if (!els.aboutModal.hidden) els.aboutModal.hidden = true;
         else if (isNotesPanelOpen()) closeNotesPanel();
       }
     });

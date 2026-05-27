@@ -188,6 +188,20 @@ body.notes-open .layout {
 }
 .slide-list .del:hover { color: var(--danger); background: transparent; }
 
+.sidebar-foot {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+}
+.sidebar-foot button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.sidebar-foot button:hover { color: var(--text); background: var(--button-hover); }
+
 /* Editor */
 .editor {
   display: flex;
@@ -524,3 +538,30 @@ body.light .projects-list .proj-actions button.danger:hover { background: #fbe1e
   color: var(--muted);
   font-style: italic;
 }
+
+/* About modal */
+.about-modal {
+  background: rgba(0,0,0,.55);
+  align-items: center;
+  justify-content: center;
+}
+.about-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.45);
+}
+.about-card .modal-head { border-radius: 8px 8px 0 0; }
+.about-body {
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.about-body p { margin: 0 0 10px; }
+.about-body p:last-child { margin-bottom: 0; }
+.about-body a { color: var(--accent); }
