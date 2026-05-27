@@ -36,11 +36,10 @@
     </label>
     <button id="btn-preview" type="button" title="Preview from start (P)">Preview</button>
     <button id="btn-preview-here" type="button" title="Preview starting from the current slide (Shift+P)">Preview from Here</button>
-    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
-    <button id="btn-export-html" type="button">Export HTML</button>
     <button id="btn-projects" type="button" title="Manage saved projects">Projects…</button>
     <button id="btn-new" type="button" title="New deck">+ New</button>
     <span id="status" class="status"></span>
+    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
   </div>
 </header>
 
@@ -182,8 +181,8 @@
       <button type="button" id="projects-new">+ New project</button>
       <button type="button" id="projects-export-all">Export all (.zip)</button>
       <label class="projects-import">
-        <span>Import .json or .zip…</span>
-        <input id="projects-import-input" type="file" accept="application/json,.json,application/zip,.zip" multiple hidden>
+        <span>Import .json, .zip, or .md…</span>
+        <input id="projects-import-input" type="file" accept="application/json,.json,application/zip,.zip,text/markdown,.md,.markdown" multiple hidden>
       </label>
     </div>
     <ul id="projects-list" class="projects-list" aria-label="Saved projects"></ul>
@@ -207,6 +206,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
         integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"
+        integrity="sha384-OGauEFaI5hnS8jXK4qdSGShAUAObMBKoLXgcL1ORhRh7ulx5jPZH35qVpacIEA4Z"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"
+        integrity="sha384-YTBHtsL8yVTHcLakYNyrOfK3K+QQcXiECuaALJ+3j7Mo681Rtzadt8NR6WrZH+eQ"
         crossorigin="anonymous"></script>
 <script src="app.js"></script>
 </body>

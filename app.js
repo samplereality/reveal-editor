@@ -1081,14 +1081,14 @@
   }
 
   // -------- Preview / Export --------
-  function buildDeckHtml({ standalone, startAt }) {
+  function buildDeckHtml({ standalone, startAt, project = state }) {
     const cdn = `https://cdn.jsdelivr.net/npm/reveal.js@${REVEAL_VERSION}`;
-    const themeHref = `${cdn}/dist/theme/${state.theme}.css`;
+    const themeHref = `${cdn}/dist/theme/${project.theme}.css`;
     const revealCss = `${cdn}/dist/reveal.css`;
     const revealJs = `${cdn}/dist/reveal.js`;
     const notesJs = `${cdn}/plugin/notes/notes.js`;
 
-    const sections = buildSections(state.slides);
+    const sections = buildSections(project.slides);
     const initOpts = `{ hash: ${standalone ? 'true' : 'false'}, controls: true, progress: true, plugins: [RevealNotes] }`;
     const startCall = startAt
       ? `.then(() => Reveal.slide(${startAt[0]}, ${startAt[1]}))`
@@ -1099,7 +1099,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(state.title || 'Presentation')}</title>
+<title>${escapeHtml(project.title || 'Presentation')}</title>
 <link rel="stylesheet" href="${revealCss}">
 <link rel="stylesheet" href="${themeHref}" id="theme">
 </head>
@@ -1194,10 +1194,174 @@ ${sections}
     els.previewFrame.removeAttribute('src');
   }
 
-  function exportHtml() {
-    captureCurrentContent();
-    const html = buildDeckHtml({ standalone: true });
-    download(html, (state.title || 'presentation') + '.html', 'text/html');
+  function exportProjectAsHtml(id) {
+    const p = library.projects.find(x => x.id === id);
+    if (!p) return;
+    if (state.id === id) captureCurrentContent();
+    const html = buildDeckHtml({ standalone: true, project: p });
+    download(html, safeFilename(p.name || p.title || 'presentation') + '.html', 'text/html');
+  }
+
+  // -------- Markdown export --------
+  async function exportProjectAsMarkdown(id) {
+    const p = library.projects.find(x => x.id === id);
+    if (!p) return;
+    if (state.id === id) captureCurrentContent();
+    if (typeof TurndownService === 'undefined') {
+      alert('Markdown converter (turndown) failed to load — check your network.');
+      return;
+    }
+
+    // Pull every data: URI off the slides into a sibling assets/ folder so
+    // the .md stays human-readable. If nothing inlined, just download .md.
+    const assets = new Map(); // dataUri → { path, mime, base64 }
+    const counter = { n: 1 };
+    const slidesForExport = p.slides.map(s => extractDataUriAssets(s, assets, counter));
+    const projectForExport = { ...p, slides: slidesForExport };
+    const md = projectToMarkdown(projectForExport);
+    const baseName = safeFilename(p.name || p.title || 'presentation');
+
+    if (assets.size === 0) {
+      download(md, baseName + '.md', 'text/markdown');
+      return;
+    }
+    if (typeof JSZip === 'undefined') {
+      alert('JSZip not loaded — cannot bundle markdown with images.');
+      return;
+    }
+    const zip = new JSZip();
+    zip.file(baseName + '.md', md);
+    for (const asset of assets.values()) {
+      zip.file(asset.path, asset.base64, { base64: true });
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    download(blob, baseName + '.md.zip', 'application/zip');
+  }
+
+  function extractDataUriAssets(slide, assetMap, counter) {
+    const next = { ...slide };
+    if (slide.content) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = slide.content;
+      wrap.querySelectorAll('img[src^="data:"]').forEach(img => {
+        const a = ensureAsset(img.getAttribute('src') || '', assetMap, counter);
+        if (a) img.setAttribute('src', a.path);
+      });
+      next.content = wrap.innerHTML;
+    }
+    if (slide.background && slide.background.value
+        && /^data:/.test(slide.background.value)
+        && (slide.background.type === 'image' || slide.background.type === 'video')) {
+      const a = ensureAsset(slide.background.value, assetMap, counter);
+      if (a) next.background = { ...slide.background, value: a.path };
+    }
+    return next;
+  }
+
+  function ensureAsset(dataUri, assetMap, counter) {
+    if (assetMap.has(dataUri)) return assetMap.get(dataUri);
+    const m = dataUri.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
+    if (!m) return null;
+    const mime = m[1];
+    const base64 = m[2];
+    const ext = mimeToExt(mime);
+    const asset = { path: `assets/img-${counter.n++}.${ext}`, mime, base64 };
+    assetMap.set(dataUri, asset);
+    return asset;
+  }
+
+  function mimeToExt(mime) {
+    switch (mime) {
+      case 'image/jpeg': case 'image/jpg': return 'jpg';
+      case 'image/png': return 'png';
+      case 'image/gif': return 'gif';
+      case 'image/webp': return 'webp';
+      case 'image/svg+xml': return 'svg';
+      case 'video/mp4': return 'mp4';
+      case 'video/webm': return 'webm';
+      default: return 'bin';
+    }
+  }
+
+  function extToMime(ext) {
+    switch ((ext || '').toLowerCase()) {
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'gif': return 'image/gif';
+      case 'webp': return 'image/webp';
+      case 'svg': return 'image/svg+xml';
+      case 'mp4': return 'video/mp4';
+      case 'webm': return 'video/webm';
+      default: return 'application/octet-stream';
+    }
+  }
+
+  // -------- PDF export (via reveal's built-in print-pdf mode) --------
+  const PDF_PAYLOAD_KEY = 'reveal-editor:pdf-payload';
+
+  function exportProjectAsPdf(id) {
+    const p = library.projects.find(x => x.id === id);
+    if (!p) return;
+    if (state.id === id) captureCurrentContent();
+
+    const payload = {
+      type: 'render-deck',
+      version: REVEAL_VERSION,
+      theme: p.theme,
+      title: p.title || p.name || 'Presentation',
+      sections: buildSections(p.slides),
+      printMode: true,
+    };
+    try {
+      sessionStorage.setItem(PDF_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch (e) {
+      alert('Could not stage PDF payload: ' + (e && e.message));
+      return;
+    }
+    const win = window.open('preview.html?print-pdf=1', '_blank');
+    if (!win) {
+      alert('Popup blocked — allow pop-ups for this site, then try again.');
+    }
+  }
+
+  function projectToMarkdown(p) {
+    const td = new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced',
+      bulletListMarker: '-',
+      // Use *** for <hr> so it can't be confused with reveal's `---` slide
+      // separator.
+      hr: '***',
+      emDelimiter: '*',
+    });
+    td.keep(['iframe', 'video', 'audio']);
+
+    const blocks = [];
+    p.slides.forEach((s, i) => {
+      if (i > 0) blocks.push(s.vertical ? '--' : '---');
+      blocks.push(slideToMarkdown(s, td));
+    });
+    return blocks.join('\n\n') + '\n';
+  }
+
+  function slideToMarkdown(s, td) {
+    const parts = [];
+    const attrs = [];
+    if (s.transition) attrs.push(`data-transition="${s.transition}"`);
+    if (s.background && s.background.type && s.background.value) {
+      const k = s.background.type === 'color' ? 'data-background'
+        : `data-background-${s.background.type}`;
+      attrs.push(`${k}="${s.background.value.replace(/"/g, '&quot;')}"`);
+    }
+    if (attrs.length) parts.push(`<!-- .slide: ${attrs.join(' ')} -->`);
+
+    const body = td.turndown(s.content || '').trim();
+    if (body) parts.push(body);
+
+    const notes = (s.notes || '').trim();
+    if (notes) parts.push('Note: ' + notes);
+
+    return parts.join('\n\n');
   }
 
   function download(content, filename, type) {
@@ -1355,6 +1519,9 @@ ${sections}
       try {
         if (/\.zip$/i.test(f.name) || f.type === 'application/zip') {
           added += await importZip(f);
+        } else if (/\.(md|markdown)$/i.test(f.name) || f.type === 'text/markdown') {
+          await importMarkdownFile(f);
+          added++;
         } else {
           await importJsonFile(f);
           added++;
@@ -1382,14 +1549,115 @@ ${sections}
     markDirty(p.id);
   }
 
+  async function importMarkdownFile(file) {
+    if (typeof marked === 'undefined') {
+      throw new Error('Markdown parser (marked) not loaded');
+    }
+    const text = await file.text();
+    const slides = parseMarkdownDeck(text);
+    if (slides.length === 0) throw new Error('No slides found in markdown');
+    const name = file.name.replace(/\.(md|markdown)$/i, '');
+    const now = Date.now();
+    const p = normalizeProject({
+      id: uid(),
+      name,
+      title: name,
+      theme: (state && state.theme) || 'black',
+      slides,
+      currentId: slides[0].id,
+      createdAt: now,
+      modifiedAt: now,
+    }, name);
+    if (!p) throw new Error('Failed to build project from markdown');
+    library.projects.push(p);
+    markDirty(p.id);
+  }
+
+  // -------- Markdown deck parsing --------
+  function parseMarkdownDeck(text) {
+    const slides = [];
+    let buf = [];
+    let nextVertical = false;
+
+    const commit = () => {
+      const chunk = buf.join('\n');
+      if (chunk.trim() || slides.length > 0) {
+        slides.push(parseMarkdownSlide(chunk, nextVertical));
+      }
+      buf = [];
+    };
+
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      if (/^\s*---\s*$/.test(line)) {
+        commit();
+        nextVertical = false;
+      } else if (/^\s*--\s*$/.test(line)) {
+        commit();
+        nextVertical = true;
+      } else {
+        buf.push(line);
+      }
+    }
+    commit();
+    return slides;
+  }
+
+  function parseMarkdownSlide(chunk, vertical) {
+    const slide = newSlide('');
+    slide.vertical = !!vertical;
+
+    let body = chunk.replace(/^\s+|\s+$/g, '');
+
+    const attrMatch = body.match(/^<!--\s*\.slide:\s*([^]*?)\s*-->\s*/);
+    if (attrMatch) {
+      applyMarkdownSlideAttrs(attrMatch[1], slide);
+      body = body.slice(attrMatch[0].length);
+    }
+
+    // Pull off `Note: ...` (consumes to end — multi-line speaker notes are fine).
+    const noteMatch = body.match(/(^|\n)Note:\s*([^]*)$/);
+    if (noteMatch) {
+      slide.notes = noteMatch[2].trim();
+      body = body.slice(0, noteMatch.index).replace(/\s+$/, '');
+    }
+
+    slide.content = body.trim() ? marked.parse(body) : '';
+    return slide;
+  }
+
+  function applyMarkdownSlideAttrs(attrStr, slide) {
+    const re = /([\w-]+)\s*=\s*"([^"]*)"/g;
+    let m;
+    while ((m = re.exec(attrStr)) !== null) {
+      const key = m[1];
+      const val = m[2].replace(/&quot;/g, '"');
+      if (key === 'data-transition') {
+        slide.transition = val;
+      } else if (key === 'data-background') {
+        slide.background = { type: 'color', value: val };
+      } else if (key.startsWith('data-background-')) {
+        const type = key.slice('data-background-'.length);
+        if (type === 'color' || type === 'image' || type === 'video' || type === 'iframe') {
+          slide.background = { type, value: val };
+        }
+      }
+    }
+  }
+
   async function importZip(file) {
     if (typeof JSZip === 'undefined') {
       throw new Error('JSZip not loaded');
     }
     const zip = await JSZip.loadAsync(file);
-    const entries = Object.values(zip.files).filter(e => !e.dir && /\.json$/i.test(e.name));
+    const all = Object.values(zip.files).filter(e => !e.dir);
+    const mdEntries = all.filter(e => /\.(md|markdown)$/i.test(e.name));
+    if (mdEntries.length > 0) {
+      return await importMarkdownZipEntries(zip, mdEntries, all);
+    }
+    const jsonEntries = all.filter(e => /\.json$/i.test(e.name));
     let count = 0;
-    for (const entry of entries) {
+    for (const entry of jsonEntries) {
       try {
         const text = await entry.async('string');
         const data = JSON.parse(text);
@@ -1404,6 +1672,78 @@ ${sections}
       }
     }
     return count;
+  }
+
+  async function importMarkdownZipEntries(zip, mdEntries, allEntries) {
+    if (typeof marked === 'undefined') {
+      throw new Error('Markdown parser (marked) not loaded');
+    }
+    // Pre-load every non-md entry as a possible asset, keyed by its path.
+    const assetMap = new Map();
+    for (const entry of allEntries) {
+      if (/\.(md|markdown)$/i.test(entry.name)) continue;
+      try {
+        const base64 = await entry.async('base64');
+        const ext = (entry.name.split('.').pop() || '').toLowerCase();
+        const mime = extToMime(ext);
+        assetMap.set(entry.name, `data:${mime};base64,${base64}`);
+      } catch {
+        // Skip unreadable entries.
+      }
+    }
+    let count = 0;
+    for (const entry of mdEntries) {
+      try {
+        const text = await entry.async('string');
+        const slides = parseMarkdownDeck(text);
+        if (slides.length === 0) continue;
+        slides.forEach(s => reinlineSlideAssets(s, assetMap));
+        const name = entry.name
+          .replace(/^.*\//, '')
+          .replace(/\.(md|markdown)$/i, '');
+        const now = Date.now();
+        const p = normalizeProject({
+          id: uid(),
+          name,
+          title: name,
+          theme: (state && state.theme) || 'black',
+          slides,
+          currentId: slides[0].id,
+          createdAt: now,
+          modifiedAt: now,
+        }, name);
+        if (p) {
+          library.projects.push(p);
+          markDirty(p.id);
+          count++;
+        }
+      } catch {
+        // Skip malformed entries.
+      }
+    }
+    return count;
+  }
+
+  function reinlineSlideAssets(slide, assetMap) {
+    if (slide.content) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = slide.content;
+      let changed = false;
+      wrap.querySelectorAll('img[src]').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (/^(https?:|data:|blob:|\/)/i.test(src)) return;
+        if (assetMap.has(src)) {
+          img.setAttribute('src', assetMap.get(src));
+          changed = true;
+        }
+      });
+      if (changed) slide.content = wrap.innerHTML;
+    }
+    if (slide.background && slide.background.value
+        && !/^(https?:|data:|blob:|\/)/i.test(slide.background.value)
+        && assetMap.has(slide.background.value)) {
+      slide.background = { ...slide.background, value: assetMap.get(slide.background.value) };
+    }
   }
 
   // -------- Projects modal --------
@@ -1472,11 +1812,29 @@ ${sections}
     dupBtn.textContent = 'Duplicate';
     dupBtn.addEventListener('click', () => duplicateProject(p.id));
 
-    const exportBtn = document.createElement('button');
-    exportBtn.type = 'button';
-    exportBtn.textContent = '.json';
-    exportBtn.title = 'Download this project as .json';
-    exportBtn.addEventListener('click', () => exportProjectAsJson(p.id));
+    const exportJsonBtn = document.createElement('button');
+    exportJsonBtn.type = 'button';
+    exportJsonBtn.textContent = '.json';
+    exportJsonBtn.title = 'Download as .json (re-importable project file)';
+    exportJsonBtn.addEventListener('click', () => exportProjectAsJson(p.id));
+
+    const exportHtmlBtn = document.createElement('button');
+    exportHtmlBtn.type = 'button';
+    exportHtmlBtn.textContent = '.html';
+    exportHtmlBtn.title = 'Download as standalone reveal.js HTML';
+    exportHtmlBtn.addEventListener('click', () => exportProjectAsHtml(p.id));
+
+    const exportMdBtn = document.createElement('button');
+    exportMdBtn.type = 'button';
+    exportMdBtn.textContent = '.md';
+    exportMdBtn.title = 'Download as reveal.js Markdown';
+    exportMdBtn.addEventListener('click', () => exportProjectAsMarkdown(p.id));
+
+    const exportPdfBtn = document.createElement('button');
+    exportPdfBtn.type = 'button';
+    exportPdfBtn.textContent = '.pdf';
+    exportPdfBtn.title = 'Open print-to-PDF view in a new tab';
+    exportPdfBtn.addEventListener('click', () => exportProjectAsPdf(p.id));
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -1487,7 +1845,10 @@ ${sections}
 
     actions.appendChild(openBtn);
     actions.appendChild(dupBtn);
-    actions.appendChild(exportBtn);
+    actions.appendChild(exportJsonBtn);
+    actions.appendChild(exportHtmlBtn);
+    actions.appendChild(exportMdBtn);
+    actions.appendChild(exportPdfBtn);
     actions.appendChild(delBtn);
 
     li.appendChild(name);
@@ -1679,7 +2040,6 @@ ${sections}
 
     $('#btn-preview').addEventListener('click', () => showPreview());
     $('#btn-preview-here').addEventListener('click', () => showPreview({ fromCurrent: true }));
-    $('#btn-export-html').addEventListener('click', exportHtml);
     $('#btn-new').addEventListener('click', () => createProject());
     els.previewClose.addEventListener('click', closePreview);
     els.themeToggle.addEventListener('click', toggleUiTheme);

@@ -1,6 +1,8 @@
 (function () {
   'use strict';
 
+  var PDF_PAYLOAD_KEY = 'reveal-editor:pdf-payload';
+
   function setHref(id, href) { document.getElementById(id).href = href; }
 
   function loadScript(src) {
@@ -44,12 +46,18 @@
       .then(function () {
         var p = Reveal.initialize({
           hash: false,
-          controls: true,
-          progress: true,
+          controls: !payload.printMode,
+          progress: !payload.printMode,
           plugins: [RevealNotes],
         });
         if (payload.start) {
           p.then(function () { Reveal.slide(payload.start[0], payload.start[1]); });
+        }
+        if (payload.printMode) {
+          // Reveal auto-detects ?print-pdf in the URL and lays the deck out
+          // for print. Give it a beat to load the print stylesheet and finish
+          // its reflow before opening the print dialog.
+          p.then(function () { setTimeout(function () { window.print(); }, 1200); });
         }
         try { window.focus(); } catch (e) {}
       })
@@ -60,9 +68,29 @@
       });
   }
 
-  window.addEventListener('message', function (ev) {
-    var d = ev.data;
-    if (!d || d.type !== 'render-deck') return;
-    render(d);
-  });
+  // PDF export path: the opener stashed the payload in sessionStorage and
+  // opened us with ?print-pdf in the URL (which reveal.js itself looks for).
+  // Detect that and start rendering immediately instead of waiting for a
+  // postMessage that's never coming.
+  if (/print-pdf/i.test(window.location.search)) {
+    try {
+      var raw = sessionStorage.getItem(PDF_PAYLOAD_KEY);
+      if (raw) {
+        sessionStorage.removeItem(PDF_PAYLOAD_KEY);
+        var payload = JSON.parse(raw);
+        payload.printMode = true;
+        render(payload);
+      } else {
+        document.body.textContent = 'No PDF payload found — re-open the PDF export from the editor.';
+      }
+    } catch (e) {
+      document.body.textContent = 'Could not load PDF payload: ' + (e && e.message || e);
+    }
+  } else {
+    window.addEventListener('message', function (ev) {
+      var d = ev.data;
+      if (!d || d.type !== 'render-deck') return;
+      render(d);
+    });
+  }
 })();

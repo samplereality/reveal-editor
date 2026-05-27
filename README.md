@@ -18,7 +18,13 @@ A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentatio
 - **Vertical sub-slides.** Check "Vertical sub-slide" to nest under the previous one; reveal will lay them out as a vertical group.
 - **Speaker notes side panel.** Opens to the right of the slide so you can see the slide and notes at the same time. Notes also appear in the deck's reveal speaker view (press `S` during a preview).
 - **Multiple projects** with a Projects modal — open, duplicate, rename, delete, or export any of them.
-- **Import / Export.** Save the current deck as standalone HTML (with reveal + the notes plugin pre-wired), or export individual projects as `.json`, or every project at once as a `.zip`. Imports accept either a single `.json` or a `.zip` archive.
+- **Import / Export.** Every saved project gets four per-row export buttons in the Projects modal:
+  - **`.json`** — re-importable project file (preserves everything, including backgrounds, transitions, and fragments).
+  - **`.html`** — standalone reveal.js deck with the notes plugin pre-wired.
+  - **`.md`** — reveal.js Markdown (slides separated by `---`, vertical sub-slides by `--`, speaker notes after `Note:`, slide attributes in `<!-- .slide: ... -->` comments). Round-trippable for most content; very HTML-heavy slides may lose formatting on export. If the deck contains inline images (data URIs from paste/drop), the download becomes a `.md.zip` with the markdown plus an `assets/` folder of extracted image files; importing that `.md.zip` re-inlines the assets.
+  - **`.pdf`** — opens the deck in reveal's `?print-pdf` view in a new tab and triggers the browser print dialog (Save as PDF).
+  - And **Export all (.zip)** for bundling every project as `.json` files in one archive.
+  - Imports accept `.json`, `.zip`, or `.md` files (drop multiple at once).
 - **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage — typical 5 MB phone photo lands as ~250 KB. Small icons and SVGs are left untouched.
 
 ## How it stores your work
@@ -81,6 +87,7 @@ Practical upshot: **only import project files from sources you trust.** Imported
 - Vanilla JS, no framework, no build step.
 - [reveal.js 5.1.0](https://revealjs.com) — loaded from jsdelivr at runtime, also referenced in exported decks.
 - [JSZip 3.10.1](https://stuk.github.io/jszip/) — for the `.zip` import/export, pinned via SRI.
+- [turndown 7.2.0](https://github.com/mixmark-io/turndown) and [marked 13.0.3](https://marked.js.org/) — HTML↔Markdown conversion for the `.md` import/export, both pinned via SRI.
 
 The editor is five small files: `index.html`, `app.js`, `styles.css` for the editor itself, plus `preview.html` + `preview.js` for the sandboxed preview page. About 1,500 lines of JS for everything you see.
 
