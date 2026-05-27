@@ -61,6 +61,9 @@ body.light button.danger { border-color: #f4c4c4; color: #b91c1c; }
 body.light button.danger:hover { background: #fbe1e1; }
 
 #btn-theme-toggle {
+  position: absolute;
+  top: 10px;
+  right: 14px;
   width: 32px;
   padding: 6px 0;
   text-align: center;
@@ -78,10 +81,11 @@ textarea { resize: vertical; }
 
 /* Top bar */
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 10px 56px 10px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   gap: 12px;
