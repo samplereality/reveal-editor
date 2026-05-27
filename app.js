@@ -21,10 +21,13 @@
     source: $('#slide-source'),
     toggleSource: $('#toggle-source'),
     toolbar: $('#toolbar'),
+    undoBtn: $('#btn-undo'),
+    redoBtn: $('#btn-redo'),
     frame: $('#slide-frame'),
     bgLayer: $('#slide-bg-layer'),
     bgBadge: $('#slide-bg-badge'),
     dropOverlay: $('#drop-overlay'),
+    slideMenu: $('#slide-context-menu'),
     transition: $('#slide-transition'),
     bgType: $('#slide-bg-type'),
     bgValue: $('#slide-bg-value'),
@@ -377,8 +380,110 @@
         if (fromId && fromId !== slide.id) moveSlide(fromId, slide.id);
       });
 
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showSlideContextMenu(slide.id, e.clientX, e.clientY);
+      });
+
       els.slideList.appendChild(li);
     });
+  }
+
+  // -------- Slide context menu --------
+  function showSlideContextMenu(slideId, x, y) {
+    const idx = state.slides.findIndex(s => s.id === slideId);
+    if (idx < 0) return;
+    const slide = state.slides[idx];
+    const menu = els.slideMenu;
+    menu.innerHTML = '';
+
+    const items = [
+      { label: 'Insert slide above', action: () => insertSlideAt(idx) },
+      { label: 'Insert slide below', action: () => insertSlideAt(idx + 1) },
+      { label: 'Duplicate', action: () => duplicateSlide(slideId) },
+      { sep: true },
+      {
+        label: slide.vertical ? 'Make horizontal' : 'Make vertical sub-slide',
+        action: () => toggleSlideVertical(slideId),
+        disabled: idx === 0,
+      },
+      { label: 'Move up', action: () => swapSlides(idx, idx - 1), disabled: idx === 0 },
+      { label: 'Move down', action: () => swapSlides(idx, idx + 1), disabled: idx === state.slides.length - 1 },
+      { sep: true },
+      { label: 'Delete', action: () => deleteSlide(slideId), danger: true },
+    ];
+
+    items.forEach(item => {
+      if (item.sep) {
+        const sep = document.createElement('span');
+        sep.className = 'sep';
+        menu.appendChild(sep);
+      } else {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = item.label;
+        if (item.danger) btn.className = 'danger';
+        if (item.disabled) btn.disabled = true;
+        btn.addEventListener('click', () => {
+          hideSlideContextMenu();
+          item.action();
+        });
+        menu.appendChild(btn);
+      }
+    });
+
+    menu.hidden = false;
+    const rect = menu.getBoundingClientRect();
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth) left = Math.max(4, window.innerWidth - rect.width - 4);
+    if (top + rect.height > window.innerHeight) top = Math.max(4, window.innerHeight - rect.height - 4);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
+  function hideSlideContextMenu() {
+    if (!els.slideMenu.hidden) els.slideMenu.hidden = true;
+  }
+
+  function insertSlideAt(idx) {
+    recordHistory();
+    const s = newSlide('');
+    state.slides.splice(idx, 0, s);
+    state.currentId = s.id;
+    renderAll();
+    scheduleSave();
+    els.editor.focus();
+  }
+
+  function duplicateSlide(id) {
+    const idx = state.slides.findIndex(x => x.id === id);
+    if (idx < 0) return;
+    recordHistory();
+    const copy = JSON.parse(JSON.stringify(state.slides[idx]));
+    copy.id = uid();
+    state.slides.splice(idx + 1, 0, copy);
+    state.currentId = copy.id;
+    renderAll();
+    scheduleSave();
+  }
+
+  function swapSlides(a, b) {
+    if (a < 0 || b < 0 || a >= state.slides.length || b >= state.slides.length) return;
+    recordHistory();
+    [state.slides[a], state.slides[b]] = [state.slides[b], state.slides[a]];
+    renderSidebar();
+    scheduleSave();
+  }
+
+  function toggleSlideVertical(id) {
+    const s = state.slides.find(x => x.id === id);
+    if (!s) return;
+    recordHistory();
+    s.vertical = !s.vertical;
+    if (id === state.currentId) els.vertical.checked = s.vertical;
+    renderSidebar();
+    scheduleSave();
   }
 
   function slideNumber(idx) {
@@ -496,6 +601,83 @@
     badge.hidden = false;
   }
 
+  // -------- Undo / redo --------
+  // Snapshot-based history of the current project. Covers structural and
+  // metadata changes; text typing inside slides falls back to the browser's
+  // native contenteditable undo while focus is in the editor.
+  const HISTORY_LIMIT = 50;
+  const history = { undo: [], redo: [] };
+  let textEditField = null;  // tracks active text-input session so we snapshot once per field-focus
+
+  function snapshotProject() {
+    return {
+      title: state.title,
+      theme: state.theme,
+      currentId: state.currentId,
+      slides: JSON.parse(JSON.stringify(state.slides)),
+    };
+  }
+
+  function restoreProject(snap) {
+    state.title = snap.title;
+    state.theme = snap.theme;
+    state.slides = snap.slides;
+    state.currentId = snap.currentId;
+    if (!state.slides.some(s => s.id === state.currentId)) {
+      state.currentId = state.slides[0] && state.slides[0].id;
+    }
+    renderAll();
+    scheduleSave();
+  }
+
+  function recordHistory() {
+    captureCurrentContent();
+    history.undo.push(snapshotProject());
+    if (history.undo.length > HISTORY_LIMIT) history.undo.shift();
+    history.redo.length = 0;
+    refreshUndoButtons();
+  }
+
+  function snapshotForTextField(name) {
+    if (textEditField === name) return;
+    recordHistory();
+    textEditField = name;
+  }
+
+  function endTextEditSession() {
+    textEditField = null;
+  }
+
+  function undo() {
+    if (history.undo.length === 0) return;
+    captureCurrentContent();
+    history.redo.push(snapshotProject());
+    restoreProject(history.undo.pop());
+    textEditField = null;
+    refreshUndoButtons();
+  }
+
+  function redo() {
+    if (history.redo.length === 0) return;
+    captureCurrentContent();
+    history.undo.push(snapshotProject());
+    restoreProject(history.redo.pop());
+    textEditField = null;
+    refreshUndoButtons();
+  }
+
+  function refreshUndoButtons() {
+    els.undoBtn.disabled = history.undo.length === 0;
+    els.redoBtn.disabled = history.redo.length === 0;
+  }
+
+  function clearHistory() {
+    history.undo.length = 0;
+    history.redo.length = 0;
+    textEditField = null;
+    refreshUndoButtons();
+  }
+
   function refreshBgValueField() {
     const type = els.bgType.value;
     els.bgValue.disabled = !type;
@@ -597,7 +779,7 @@
   }
 
   function addSlide({ atEnd = false } = {}) {
-    captureCurrentContent();
+    recordHistory();
     const s = newSlide('');
     if (atEnd) {
       state.slides.push(s);
@@ -612,6 +794,7 @@
   }
 
   function deleteSlide(id) {
+    recordHistory();
     if (state.slides.length === 1) {
       // Reset the only slide instead of deleting
       state.slides[0] = newSlide('');
@@ -628,6 +811,7 @@
   }
 
   function moveSlide(fromId, beforeId) {
+    recordHistory();
     const fromIdx = state.slides.findIndex(s => s.id === fromId);
     if (fromIdx < 0) return;
     const [moved] = state.slides.splice(fromIdx, 1);
@@ -1464,6 +1648,7 @@ ${sections}
     state = p;
     library.currentProjectId = id;
     metaDirty = true;
+    clearHistory();
     renderAll();
     flushDirty();
   }
@@ -1477,6 +1662,7 @@ ${sections}
     library.currentProjectId = p.id;
     markDirty(p.id);
     metaDirty = true;
+    clearHistory();
     renderAll();
     flushDirty();
     renderProjectsList();
@@ -1519,10 +1705,12 @@ ${sections}
       state = fresh;
       library.currentProjectId = fresh.id;
       markDirty(fresh.id);
+      clearHistory();
       renderAll();
     } else if (state.id === id) {
       state = library.projects[Math.max(0, idx - 1)];
       library.currentProjectId = state.id;
+      clearHistory();
       renderAll();
     }
     metaDirty = true;
@@ -2013,13 +2201,16 @@ ${sections}
   // -------- Wiring --------
   function wire() {
     els.deckTitle.addEventListener('input', () => {
+      snapshotForTextField('deckTitle');
       state.title = els.deckTitle.value;
       // Keep the project name (shown in the Projects list) aligned with the
       // deck title — users rename via either.
       state.name = els.deckTitle.value;
       scheduleSave();
     });
+    els.deckTitle.addEventListener('blur', endTextEditSession);
     els.themeSelect.addEventListener('change', () => {
+      recordHistory();
       state.theme = els.themeSelect.value;
       applyDeckTheme(state.theme);
       scheduleSave();
@@ -2064,9 +2255,12 @@ ${sections}
     els.toolbar.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
       if (!btn) return;
+      if (btn === els.undoBtn) { undo(); return; }
+      if (btn === els.redoBtn) { redo(); return; }
       const cmd = btn.dataset.cmd;
       const arg = btn.dataset.arg || null;
       const action = btn.dataset.action;
+      if (cmd || action) recordHistory();
       if (cmd) {
         execCmd(cmd, arg);
       } else if (action) {
@@ -2083,8 +2277,13 @@ ${sections}
       renderEditor();
     });
 
-    els.transition.addEventListener('change', () => { currentSlide().transition = els.transition.value; scheduleSave(); });
+    els.transition.addEventListener('change', () => {
+      recordHistory();
+      currentSlide().transition = els.transition.value;
+      scheduleSave();
+    });
     els.bgType.addEventListener('change', () => {
+      recordHistory();
       const slide = currentSlide();
       slide.background.type = els.bgType.value;
       if (!els.bgType.value) slide.background.value = '';
@@ -2094,16 +2293,20 @@ ${sections}
       scheduleSave();
     });
     els.bgValue.addEventListener('input', () => {
+      snapshotForTextField('bgValue');
       currentSlide().background.value = els.bgValue.value;
       applyEditorBackground();
       scheduleSave();
     });
+    els.bgValue.addEventListener('blur', endTextEditSession);
     els.vertical.addEventListener('change', () => {
+      recordHistory();
       currentSlide().vertical = els.vertical.checked;
       renderSidebar();
       scheduleSave();
     });
     els.notes.addEventListener('input', () => {
+      snapshotForTextField('notes');
       const slide = currentSlide();
       slide.notes = els.notes.value;
       if (isNotesPanelOpen() && els.notesPanelText.value !== slide.notes) {
@@ -2111,6 +2314,7 @@ ${sections}
       }
       scheduleSave();
     });
+    els.notes.addEventListener('blur', endTextEditSession);
 
     els.fileInput.addEventListener('change', () => {
       const file = els.fileInput.files && els.fileInput.files[0];
@@ -2126,12 +2330,14 @@ ${sections}
     els.notesPopout.addEventListener('click', toggleNotesPanel);
     els.notesPanelClose.addEventListener('click', closeNotesPanel);
     els.notesPanelText.addEventListener('input', () => {
+      snapshotForTextField('notes');
       const slide = currentSlide();
       if (!slide) return;
       slide.notes = els.notesPanelText.value;
       if (els.notes.value !== slide.notes) els.notes.value = slide.notes;
       scheduleSave();
     });
+    els.notesPanelText.addEventListener('blur', endTextEditSession);
 
     // About modal
     els.aboutButton.addEventListener('click', () => { els.aboutModal.hidden = false; });
@@ -2154,19 +2360,40 @@ ${sections}
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       const mod = e.metaKey || e.ctrlKey;
+      const inEditor = e.target === els.editor || els.editor.contains(e.target);
       if (mod && e.key === 's') { e.preventDefault(); saveProject(); }
       else if (mod && e.shiftKey && e.key === 'Enter') { e.preventDefault(); addSlide(); }
       else if (mod && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault(); showPreview({ fromCurrent: true });
       }
       else if (mod && e.key === 'p') { e.preventDefault(); showPreview(); }
+      // Undo/redo: only when focus is OUTSIDE the slide editor, so the
+      // browser's native contenteditable undo keeps working for typing.
+      else if (mod && !inEditor && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault(); redo();
+      }
+      else if (mod && !inEditor && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault(); undo();
+      }
+      else if (mod && !inEditor && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault(); redo();
+      }
       else if (e.key === 'Escape') {
-        if (!els.previewModal.hidden) closePreview();
+        if (!els.slideMenu.hidden) hideSlideContextMenu();
+        else if (!els.previewModal.hidden) closePreview();
         else if (!els.projectsModal.hidden) closeProjectsModal();
         else if (!els.aboutModal.hidden) els.aboutModal.hidden = true;
         else if (isNotesPanelOpen()) closeNotesPanel();
       }
     });
+
+    // Dismiss the slide context menu on outside click, scroll, or window blur.
+    document.addEventListener('mousedown', (e) => {
+      if (els.slideMenu.hidden) return;
+      if (!els.slideMenu.contains(e.target)) hideSlideContextMenu();
+    });
+    window.addEventListener('scroll', hideSlideContextMenu, true);
+    window.addEventListener('blur', hideSlideContextMenu);
 
     setupDropZone();
     setupPaste();

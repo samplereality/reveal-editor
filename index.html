@@ -57,6 +57,9 @@
 
   <section class="editor">
     <div class="toolbar" id="toolbar">
+      <button type="button" id="btn-undo" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
+      <button type="button" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+      <span class="sep"></span>
       <button type="button" data-cmd="formatBlock" data-arg="h1" title="Heading 1">H1</button>
       <button type="button" data-cmd="formatBlock" data-arg="h2" title="Heading 2">H2</button>
       <button type="button" data-cmd="formatBlock" data-arg="h3" title="Heading 3">H3</button>
@@ -201,6 +204,8 @@
     </div>
   </div>
 </div>
+
+<div id="slide-context-menu" class="context-menu" role="menu" hidden></div>
 
 <input id="file-input" type="file" accept="image/*" hidden>
 
