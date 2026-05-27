@@ -513,6 +513,14 @@
     tmp.innerHTML = slide.content;
     const txt = (tmp.textContent || '').trim().replace(/\s+/g, ' ');
     if (txt) return txt.length > 48 ? txt.slice(0, 48) + '…' : txt;
+    const media = tmp.querySelector('img, video, iframe');
+    if (media) {
+      const tag = media.tagName.toLowerCase();
+      return backgroundLabel({
+        type: tag === 'img' ? 'image' : tag,
+        value: media.getAttribute('src') || '',
+      });
+    }
     if (slide.background && slide.background.type && slide.background.value) {
       return backgroundLabel(slide.background);
     }
