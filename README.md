@@ -69,12 +69,12 @@ python3 -m http.server 8000
 
 ## Security notes
 
-Slide content is arbitrary HTML — including `<script>` and `<iframe>` because that's what reveal supports. The editor takes two precautions:
+Slide content is arbitrary HTML — including `<script>` and `<iframe>` because that's what reveal supports.
 
-- **Previews are sandboxed.** The preview iframe uses `sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"`, which gives it a unique opaque origin. A script inside a slide can't read the editor's IndexedDB, can't touch `window.parent`, can't navigate the host page.
-- **Two-CSP design.** The editor itself runs under a strict CSP (its own origin, jsdelivr, Google Fonts; no inline scripts). The preview lives in a separate `preview.html` page that's loaded into the sandboxed iframe and gets the deck data via `postMessage` — so its more permissive CSP (needed for arbitrary slide HTML) is isolated from the editor's. The same CSP is enforced via `.htaccess` on Apache hosts and a `<meta>` tag on static hosts. JSZip is pinned with a subresource-integrity hash.
+- **Preview iframe.** The preview runs in an iframe sandboxed as `allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox`. `allow-same-origin` is required so Chrome's built-in PDF viewer can render PDF iframe backgrounds. Because `preview.html` is served from the same origin as the editor, this combination is effectively no sandbox at all for slide scripts — a script in a slide *can* reach `window.parent` and read the editor's IndexedDB. The sandbox still blocks top-level navigation, but it does not isolate slide scripts from your editor data.
+- **Two-CSP design.** The editor itself runs under a strict CSP (its own origin, jsdelivr, Google Fonts; no inline scripts). The preview lives in a separate `preview.html` page that's loaded into the iframe and gets the deck data via `postMessage` — so its more permissive CSP (needed for arbitrary slide HTML) is isolated from the editor's at the CSP level. The same CSP is enforced via `.htaccess` on Apache hosts and a `<meta>` tag on static hosts. JSZip is pinned with a subresource-integrity hash.
 
-That said: **only import project files from sources you trust.** Imported HTML is rendered with `innerHTML`, and an `<img onerror="...">` inside an imported deck will fire when you preview it. The sandbox limits the blast radius (no access to your library), but the script still runs.
+Practical upshot: **only import project files from sources you trust.** Imported HTML is rendered with `innerHTML`, and an `<img onerror="...">` inside an imported deck will fire when you preview it. Because the preview iframe is same-origin with the editor, that script can read your entire project library. If that's a concern for you, host `preview.html` on a separate subdomain — then `allow-same-origin` only grants the iframe access to that subdomain, and the sandbox is meaningfully restored.
 
 ## Tech stack
 
