@@ -399,7 +399,37 @@
     const tmp = document.createElement('div');
     tmp.innerHTML = slide.content;
     const txt = (tmp.textContent || '').trim().replace(/\s+/g, ' ');
-    return txt ? (txt.length > 48 ? txt.slice(0, 48) + '…' : txt) : '(empty)';
+    if (txt) return txt.length > 48 ? txt.slice(0, 48) + '…' : txt;
+    if (slide.background && slide.background.type && slide.background.value) {
+      return backgroundLabel(slide.background);
+    }
+    return '(empty)';
+  }
+
+  const BG_ICONS = { image: '🖼', video: '🎬', iframe: '🌐', color: '🎨' };
+
+  function backgroundLabel(bg) {
+    const type = bg.type;
+    const value = String(bg.value || '');
+    let hint;
+    if (type === 'color') {
+      hint = value.trim();
+    } else if (/^data:/.test(value)) {
+      const mime = (value.match(/^data:([^;,]+)/) || ['', ''])[1];
+      hint = mime ? `inline ${mime}` : 'inline data';
+    } else {
+      hint = value;
+      try {
+        const u = new URL(value, window.location.href);
+        hint = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname);
+      } catch {
+        const parts = value.split(/[/\\]/).filter(Boolean);
+        if (parts.length) hint = parts[parts.length - 1];
+      }
+    }
+    if (hint.length > 40) hint = hint.slice(0, 37) + '…';
+    const icon = BG_ICONS[type] || '•';
+    return `${icon} ${hint}`;
   }
 
   function renderEditor() {
