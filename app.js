@@ -453,9 +453,10 @@
     } else if (type === 'iframe') {
       const f = document.createElement('iframe');
       f.src = value;
-      // Same sandbox as the preview iframe — keeps `allow-same-origin` so
-      // Chrome's PDF viewer can render PDF backgrounds in the editor too.
-      f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      // No sandbox: Chrome's PDF viewer refuses to render inside any
+      // sandboxed iframe (even with allow-same-origin) on production, so
+      // we let the background iframe run at full origin to match what
+      // the deck does when exported as standalone HTML.
       f.setAttribute('referrerpolicy', 'no-referrer');
       layer.appendChild(f);
     }
