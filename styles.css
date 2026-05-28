@@ -627,6 +627,79 @@ body.light .projects-list .proj-actions button.danger:hover { background: #fbe1e
   font-style: italic;
 }
 
+/* Sync pill in topbar */
+.sync-pill {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sync-pill:hover { background: var(--button-hover); color: var(--text); }
+.sync-pill.is-syncing { color: var(--accent); border-color: var(--accent); }
+.sync-pill.is-error { color: var(--danger); border-color: var(--danger); }
+.sync-pill.is-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--border)); }
+
+/* Sync modal */
+.sync-modal {
+  background: rgba(0, 0, 0, .55);
+  align-items: center;
+  justify-content: center;
+}
+.sync-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(540px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+  overflow: hidden;
+}
+.sync-card .modal-head { border-radius: 8px 8px 0 0; }
+.sync-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.sync-body p { margin: 0 0 10px; }
+.sync-body a { color: var(--accent); }
+.sync-steps { padding-left: 20px; margin: 8px 0 14px; }
+.sync-steps li { margin-bottom: 6px; }
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.sync-field span { color: var(--muted); font-size: 12px; }
+.sync-field em { font-style: normal; color: var(--muted); }
+.sync-field input { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.sync-status-line { margin: 4px 0; }
+.sync-error {
+  color: #ffb3b3;
+  background: rgba(194, 90, 90, .15);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+body.light .sync-error { color: #b91c1c; }
+
 /* Settings modal */
 .settings-modal {
   background: rgba(0, 0, 0, .55);

@@ -56,6 +56,21 @@
     settingsClose: $('#settings-close'),
     settingsForm: $('#settings-form'),
     settingsReset: $('#settings-reset'),
+    syncPill: $('#btn-sync'),
+    syncModal: $('#sync-modal'),
+    syncClose: $('#sync-close'),
+    syncSetup: $('#sync-setup'),
+    syncConnected: $('#sync-connected'),
+    syncPat: $('#sync-pat'),
+    syncGistId: $('#sync-gist-id'),
+    syncConnect: $('#sync-connect'),
+    syncNow: $('#sync-now'),
+    syncReset: $('#sync-reset'),
+    syncDisconnect: $('#sync-disconnect'),
+    syncStatusText: $('#sync-status-text'),
+    syncLast: $('#sync-last'),
+    syncError: $('#sync-error'),
+    syncGistLink: $('#sync-gist-link'),
     themeToggle: $('#btn-theme-toggle'),
     notesPopout: $('#btn-notes-popout'),
     notesPanel: $('#notes-panel'),
@@ -225,7 +240,8 @@
       if (!projects.some(p => p.id === currentProjectId)) currentProjectId = projects[0].id;
       // Sort: keep stable but newest first as a default presentation order.
       projects.sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
-      return { version: 1, currentProjectId, projects };
+      const deletedIds = Array.isArray(meta?.deletedIds) ? meta.deletedIds : [];
+      return { version: 1, currentProjectId, projects, deletedIds };
     }
 
     // First-run migration from the multi-project localStorage key.
@@ -270,7 +286,19 @@
 
   function freshLibrary() {
     const p = blankProject();
-    return { version: 1, currentProjectId: p.id, projects: [p] };
+    return { version: 1, currentProjectId: p.id, projects: [p], deletedIds: [] };
+  }
+
+  function ensureDeletedIds() {
+    if (!Array.isArray(library.deletedIds)) library.deletedIds = [];
+  }
+
+  function recordTombstone(id) {
+    ensureDeletedIds();
+    const existing = library.deletedIds.find(t => t.id === id);
+    const now = Date.now();
+    if (existing) existing.deletedAt = now;
+    else library.deletedIds.push({ id, deletedAt: now });
   }
 
   // Mark a project (or the current one) for the next flush.
@@ -297,7 +325,10 @@
         await idbPut(STORE_PROJECTS, p);
       }
       if (wasMetaDirty) {
-        await idbPut(STORE_META, { currentProjectId: library.currentProjectId }, META_KEY);
+        await idbPut(STORE_META, {
+          currentProjectId: library.currentProjectId,
+          deletedIds: library.deletedIds || [],
+        }, META_KEY);
       }
       setStatus('Saved', true);
     } catch (e) {
@@ -325,6 +356,7 @@
     if (state) markDirty(state.id);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; flushDirty(); }, 400);
+    schedulePush();
   }
 
   function setStatus(text, ok) {
@@ -1719,6 +1751,7 @@ ${sections}
     if (!confirm(`Delete "${p.name || p.title}"? This can't be undone.`)) return;
     library.projects.splice(idx, 1);
     deleteProjectRecord(id);
+    recordTombstone(id);
     if (library.projects.length === 0) {
       const fresh = blankProject();
       library.projects.push(fresh);
@@ -2368,6 +2401,448 @@ ${sections}
     else openNotesPanel();
   }
 
+  // -------- Sync via GitHub Gist --------
+  const SYNC_STORAGE = {
+    pat: 'reveal-editor:sync:pat',
+    gistId: 'reveal-editor:sync:gist',
+    lastSync: 'reveal-editor:sync:lastSync',
+  };
+  const SYNC_LIBRARY_FILE = '_library.json';
+  const SYNC_AUTO_PUSH_MS = 3000;
+
+  const sync = {
+    pat: null,
+    gistId: null,
+    status: 'off',     // 'off' | 'idle' | 'syncing' | 'error'
+    lastSync: null,
+    error: null,
+    pushTimer: null,
+    inFlight: null,
+  };
+
+  function loadSyncConfig() {
+    try {
+      sync.pat = localStorage.getItem(SYNC_STORAGE.pat) || null;
+      sync.gistId = localStorage.getItem(SYNC_STORAGE.gistId) || null;
+      const last = localStorage.getItem(SYNC_STORAGE.lastSync);
+      sync.lastSync = last ? parseInt(last, 10) : null;
+    } catch {}
+    sync.status = (sync.pat && sync.gistId) ? 'idle' : 'off';
+    updateSyncPill();
+  }
+
+  function persistSyncConfig() {
+    try {
+      if (sync.pat) localStorage.setItem(SYNC_STORAGE.pat, sync.pat);
+      else localStorage.removeItem(SYNC_STORAGE.pat);
+      if (sync.gistId) localStorage.setItem(SYNC_STORAGE.gistId, sync.gistId);
+      else localStorage.removeItem(SYNC_STORAGE.gistId);
+      if (sync.lastSync) localStorage.setItem(SYNC_STORAGE.lastSync, String(sync.lastSync));
+      else localStorage.removeItem(SYNC_STORAGE.lastSync);
+    } catch {}
+  }
+
+  function syncDisconnect() {
+    sync.pat = null;
+    sync.gistId = null;
+    sync.lastSync = null;
+    sync.status = 'off';
+    sync.error = null;
+    persistSyncConfig();
+    updateSyncPill();
+    renderSyncModal();
+  }
+
+  function updateSyncPill() {
+    const pill = els.syncPill;
+    pill.classList.remove('is-syncing', 'is-error', 'is-ok');
+    if (sync.status === 'off') {
+      pill.textContent = 'Sync: off';
+    } else if (sync.status === 'syncing') {
+      pill.textContent = 'Syncing…';
+      pill.classList.add('is-syncing');
+    } else if (sync.status === 'error') {
+      pill.textContent = 'Sync error';
+      pill.classList.add('is-error');
+    } else {
+      pill.textContent = sync.lastSync ? `Synced ${formatRelative(sync.lastSync)}` : 'Sync: ready';
+      if (sync.lastSync && Date.now() - sync.lastSync < 60000) pill.classList.add('is-ok');
+    }
+  }
+
+  async function gistFetch(path, init = {}) {
+    if (!sync.pat) throw new Error('No personal access token configured.');
+    const r = await fetch(`https://api.github.com${path}`, {
+      ...init,
+      headers: {
+        'Authorization': `Bearer ${sync.pat}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(init.headers || {}),
+      },
+    });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      const msg = (() => {
+        try { return JSON.parse(body).message; } catch { return body; }
+      })();
+      throw new Error(`GitHub API ${r.status}: ${msg || r.statusText}`);
+    }
+    if (r.status === 204) return null;
+    return await r.json();
+  }
+
+  async function gistGet(id) { return gistFetch(`/gists/${id}`); }
+  async function gistPatch(id, files) {
+    return gistFetch(`/gists/${id}`, { method: 'PATCH', body: JSON.stringify({ files }) });
+  }
+  async function gistCreate(files, description) {
+    return gistFetch('/gists', {
+      method: 'POST',
+      body: JSON.stringify({ description, public: false, files }),
+    });
+  }
+
+  function buildLibraryGistFile() {
+    return {
+      content: JSON.stringify({
+        version: 1,
+        currentProjectId: library.currentProjectId,
+        deletedIds: library.deletedIds || [],
+        generatedAt: Date.now(),
+      }, null, 2),
+    };
+  }
+
+  function buildProjectGistFiles() {
+    const files = {};
+    for (const p of library.projects) {
+      files[`${p.id}.json`] = { content: JSON.stringify(serializeProject(p), null, 2) };
+    }
+    return files;
+  }
+
+  function parseProjectFromGist(file, idFromFilename) {
+    if (!file || typeof file.content !== 'string') return null;
+    try {
+      const data = JSON.parse(file.content);
+      data.id = data.id || idFromFilename;
+      return normalizeProject(data, data.name || data.title);
+    } catch {
+      return null;
+    }
+  }
+
+  function parseLibraryGist(file) {
+    if (!file || typeof file.content !== 'string') return { deletedIds: [], currentProjectId: null };
+    try {
+      const data = JSON.parse(file.content);
+      return {
+        deletedIds: Array.isArray(data.deletedIds) ? data.deletedIds : [],
+        currentProjectId: data.currentProjectId || null,
+      };
+    } catch {
+      return { deletedIds: [], currentProjectId: null };
+    }
+  }
+
+  function mergeTombstones(local, remote) {
+    const merged = new Map();
+    for (const t of local) merged.set(t.id, t);
+    for (const t of remote) {
+      const ex = merged.get(t.id);
+      if (!ex || (t.deletedAt || 0) > (ex.deletedAt || 0)) merged.set(t.id, t);
+    }
+    return Array.from(merged.values());
+  }
+
+  // Pull the gist and merge it with the local library.
+  async function syncPull() {
+    const remote = await gistGet(sync.gistId);
+    const files = remote.files || {};
+    const libFile = files[SYNC_LIBRARY_FILE];
+    const remoteLib = parseLibraryGist(libFile);
+    ensureDeletedIds();
+
+    const remoteProjects = [];
+    for (const name of Object.keys(files)) {
+      if (name === SYNC_LIBRARY_FILE) continue;
+      const idFromName = name.replace(/\.json$/i, '');
+      const p = parseProjectFromGist(files[name], idFromName);
+      if (p) remoteProjects.push(p);
+    }
+
+    const tombstones = mergeTombstones(library.deletedIds, remoteLib.deletedIds);
+    const tombMap = new Map(tombstones.map(t => [t.id, t.deletedAt || 0]));
+
+    const localById = new Map(library.projects.map(p => [p.id, p]));
+
+    // Remove local projects whose remote tombstone is newer than local modifiedAt.
+    for (const p of [...library.projects]) {
+      const ts = tombMap.get(p.id);
+      if (ts && ts > (p.modifiedAt || 0)) {
+        const idx = library.projects.indexOf(p);
+        if (idx >= 0) library.projects.splice(idx, 1);
+        deleteProjectRecord(p.id);
+        localById.delete(p.id);
+      }
+    }
+
+    // Merge each remote project into local.
+    for (const rp of remoteProjects) {
+      const ts = tombMap.get(rp.id);
+      if (ts && ts > (rp.modifiedAt || 0)) continue; // tombstoned newer than remote — skip
+      const lp = localById.get(rp.id);
+      if (!lp) {
+        library.projects.push(rp);
+        markDirty(rp.id);
+      } else if ((rp.modifiedAt || 0) > (lp.modifiedAt || 0)) {
+        // Replace local fields in place (state may still reference lp).
+        Object.assign(lp, rp);
+        if (state && state.id === lp.id) renderAll();
+      }
+    }
+
+    // Make sure we still have a current project after deletions.
+    if (library.projects.length === 0) {
+      const fresh = blankProject();
+      library.projects.push(fresh);
+      state = fresh;
+      library.currentProjectId = fresh.id;
+      markDirty(fresh.id);
+      renderAll();
+    } else if (!library.projects.some(p => p.id === library.currentProjectId)) {
+      state = library.projects[0];
+      library.currentProjectId = state.id;
+      renderAll();
+    } else if (state) {
+      // Refresh sidebar in case projects were added/removed.
+      renderSidebar();
+    }
+    library.deletedIds = tombstones;
+    metaDirty = true;
+    await flushDirty();
+  }
+
+  // Push the local library to the gist, including null entries for files that
+  // should be removed on the remote (tombstoned or renamed).
+  async function syncPush(remoteSnapshot) {
+    const files = buildProjectGistFiles();
+    files[SYNC_LIBRARY_FILE] = buildLibraryGistFile();
+
+    // Mark files to delete on remote: tombstoned IDs that still exist as files.
+    if (remoteSnapshot && remoteSnapshot.files) {
+      const localIds = new Set(library.projects.map(p => p.id));
+      for (const name of Object.keys(remoteSnapshot.files)) {
+        if (name === SYNC_LIBRARY_FILE) continue;
+        const id = name.replace(/\.json$/i, '');
+        if (!localIds.has(id)) files[name] = null;
+      }
+    } else {
+      // No snapshot — best effort: delete tombstoned file names.
+      for (const t of library.deletedIds || []) {
+        files[`${t.id}.json`] = null;
+      }
+    }
+    await gistPatch(sync.gistId, files);
+  }
+
+  async function syncNow({ silent = false } = {}) {
+    if (sync.status === 'off') return;
+    if (sync.inFlight) return sync.inFlight;
+    if (sync.pushTimer) { clearTimeout(sync.pushTimer); sync.pushTimer = null; }
+    sync.status = 'syncing';
+    sync.error = null;
+    updateSyncPill();
+    renderSyncModal();
+    captureCurrentContent();
+    if (state) markDirty(state.id);
+    await flushDirty();
+
+    sync.inFlight = (async () => {
+      try {
+        // Pull first, then push the merged state — keeps both sides in lockstep.
+        const remoteBefore = await gistGet(sync.gistId);
+        applyPulledGist(remoteBefore);
+        await syncPush(remoteBefore);
+        sync.lastSync = Date.now();
+        sync.status = 'idle';
+        sync.error = null;
+        persistSyncConfig();
+      } catch (e) {
+        sync.status = 'error';
+        sync.error = e.message || String(e);
+        if (!silent) console.warn('sync failed:', e);
+      } finally {
+        sync.inFlight = null;
+        updateSyncPill();
+        renderSyncModal();
+      }
+    })();
+    return sync.inFlight;
+  }
+
+  // Pulled-gist application split out so syncNow can reuse the fetched data.
+  function applyPulledGist(remote) {
+    if (!remote || !remote.files) return;
+    const files = remote.files;
+    const remoteLib = parseLibraryGist(files[SYNC_LIBRARY_FILE]);
+    ensureDeletedIds();
+
+    const remoteProjects = [];
+    for (const name of Object.keys(files)) {
+      if (name === SYNC_LIBRARY_FILE) continue;
+      const idFromName = name.replace(/\.json$/i, '');
+      const p = parseProjectFromGist(files[name], idFromName);
+      if (p) remoteProjects.push(p);
+    }
+
+    const tombstones = mergeTombstones(library.deletedIds, remoteLib.deletedIds);
+    const tombMap = new Map(tombstones.map(t => [t.id, t.deletedAt || 0]));
+    const localById = new Map(library.projects.map(p => [p.id, p]));
+
+    for (const p of [...library.projects]) {
+      const ts = tombMap.get(p.id);
+      if (ts && ts > (p.modifiedAt || 0)) {
+        const idx = library.projects.indexOf(p);
+        if (idx >= 0) library.projects.splice(idx, 1);
+        deleteProjectRecord(p.id);
+        localById.delete(p.id);
+      }
+    }
+    for (const rp of remoteProjects) {
+      const ts = tombMap.get(rp.id);
+      if (ts && ts > (rp.modifiedAt || 0)) continue;
+      const lp = localById.get(rp.id);
+      if (!lp) {
+        library.projects.push(rp);
+        markDirty(rp.id);
+      } else if ((rp.modifiedAt || 0) > (lp.modifiedAt || 0)) {
+        Object.assign(lp, rp);
+        if (state && state.id === lp.id) renderAll();
+      }
+    }
+    if (library.projects.length === 0) {
+      const fresh = blankProject();
+      library.projects.push(fresh);
+      state = fresh;
+      library.currentProjectId = fresh.id;
+      markDirty(fresh.id);
+      renderAll();
+    } else if (!library.projects.some(p => p.id === library.currentProjectId)) {
+      state = library.projects[0];
+      library.currentProjectId = state.id;
+      renderAll();
+    } else {
+      renderSidebar();
+    }
+    library.deletedIds = tombstones;
+    metaDirty = true;
+  }
+
+  // Hard-reset: replace the gist with local state, dropping anything remote-only.
+  async function syncResetGist() {
+    if (!confirm('Replace the remote gist with this browser\'s state? Anything on the gist that isn\'t local will be deleted.')) return;
+    sync.status = 'syncing';
+    updateSyncPill();
+    renderSyncModal();
+    try {
+      const remote = await gistGet(sync.gistId);
+      // Mark every existing remote file null, then add local files back.
+      const files = {};
+      for (const name of Object.keys(remote.files || {})) files[name] = null;
+      Object.assign(files, buildProjectGistFiles(), { [SYNC_LIBRARY_FILE]: buildLibraryGistFile() });
+      await gistPatch(sync.gistId, files);
+      sync.lastSync = Date.now();
+      sync.status = 'idle';
+      sync.error = null;
+      persistSyncConfig();
+    } catch (e) {
+      sync.status = 'error';
+      sync.error = e.message || String(e);
+    }
+    updateSyncPill();
+    renderSyncModal();
+  }
+
+  // Schedule a debounced push after local edits.
+  function schedulePush() {
+    if (sync.status === 'off') return;
+    clearTimeout(sync.pushTimer);
+    sync.pushTimer = setTimeout(() => {
+      sync.pushTimer = null;
+      syncNow({ silent: true });
+    }, SYNC_AUTO_PUSH_MS);
+  }
+
+  // -------- Sync modal --------
+  function openSyncModal() {
+    renderSyncModal();
+    els.syncModal.hidden = false;
+  }
+
+  function closeSyncModal() {
+    els.syncModal.hidden = true;
+  }
+
+  function renderSyncModal() {
+    const configured = !!(sync.pat && sync.gistId);
+    els.syncSetup.hidden = configured;
+    els.syncConnected.hidden = !configured;
+    if (configured) {
+      els.syncStatusText.textContent = sync.status;
+      els.syncLast.textContent = sync.lastSync ? formatRelative(sync.lastSync) : 'never';
+      els.syncGistLink.href = `https://gist.github.com/${sync.gistId}`;
+      if (sync.error) {
+        els.syncError.hidden = false;
+        els.syncError.textContent = sync.error;
+      } else {
+        els.syncError.hidden = true;
+        els.syncError.textContent = '';
+      }
+      els.syncNow.disabled = sync.status === 'syncing';
+    } else {
+      els.syncPat.value = '';
+      els.syncGistId.value = '';
+    }
+  }
+
+  async function syncConnect() {
+    const pat = els.syncPat.value.trim();
+    const gistId = els.syncGistId.value.trim();
+    if (!pat) { alert('Paste a personal access token first.'); return; }
+    sync.pat = pat;
+    sync.gistId = gistId || null;
+    sync.status = 'syncing';
+    sync.error = null;
+    updateSyncPill();
+    try {
+      // Validate the token by hitting /user.
+      await gistFetch('/user');
+      if (!sync.gistId) {
+        const created = await gistCreate(
+          { [SYNC_LIBRARY_FILE]: buildLibraryGistFile(), ...buildProjectGistFiles() },
+          'Reveal Editor projects (sync)',
+        );
+        sync.gistId = created.id;
+      }
+      persistSyncConfig();
+      sync.status = 'idle';
+      renderSyncModal();
+      await syncNow();
+    } catch (e) {
+      sync.pat = null;
+      sync.gistId = gistId || null;
+      sync.status = 'off';
+      sync.error = e.message || String(e);
+      persistSyncConfig();
+      updateSyncPill();
+      renderSyncModal();
+      alert('Connection failed: ' + sync.error);
+    }
+  }
+
   // -------- Wiring --------
   function wire() {
     els.deckTitle.addEventListener('input', () => {
@@ -2524,6 +2999,21 @@ ${sections}
       if (e.target === els.settingsModal) closeSettingsModal();
     });
 
+    // Sync modal
+    els.syncPill.addEventListener('click', openSyncModal);
+    els.syncClose.addEventListener('click', closeSyncModal);
+    els.syncModal.addEventListener('click', (e) => {
+      if (e.target === els.syncModal) closeSyncModal();
+    });
+    els.syncConnect.addEventListener('click', syncConnect);
+    els.syncNow.addEventListener('click', () => syncNow());
+    els.syncReset.addEventListener('click', syncResetGist);
+    els.syncDisconnect.addEventListener('click', () => {
+      if (confirm('Disconnect sync? The token and gist ID will be cleared from this browser. Your data and the gist itself stay where they are.')) {
+        syncDisconnect();
+      }
+    });
+
     // Projects modal
     els.projectsButton.addEventListener('click', openProjectsModal);
     els.projectsClose.addEventListener('click', closeProjectsModal);
@@ -2561,6 +3051,7 @@ ${sections}
         else if (!els.previewModal.hidden) closePreview();
         else if (!els.projectsModal.hidden) closeProjectsModal();
         else if (!els.settingsModal.hidden) closeSettingsModal();
+        else if (!els.syncModal.hidden) closeSyncModal();
         else if (!els.aboutModal.hidden) els.aboutModal.hidden = true;
         else if (isNotesPanelOpen()) closeNotesPanel();
       }
@@ -2602,4 +3093,9 @@ ${sections}
   renderAll();
   wire();
   setStatus('Ready', true);
+  loadSyncConfig();
+  if (sync.status === 'idle') {
+    // Auto-pull on load so this browser starts with the latest remote state.
+    syncNow({ silent: true });
+  }
 })();

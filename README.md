@@ -34,9 +34,34 @@ Projects are saved to your browser's **IndexedDB**, which on modern browsers gra
 
 Side effects worth knowing:
 
-- Different browser or device = different IDB. Projects don't follow you. Use **Export all (.zip)** to move them.
+- Different browser or device = different IDB. Projects don't follow you unless you set up [sync](#syncing-across-browsers).
 - Clearing site data in your browser deletes everything. Export a backup if it matters.
 - Two tabs editing the same project = last write wins. Avoid it.
+
+## Syncing across browsers
+
+If you bounce between machines, the **Sync** pill in the topbar lets you mirror your projects to a private GitHub Gist. The gist is the source of truth across machines; each browser pulls on load and auto-pushes a few seconds after every edit.
+
+**Setup, once per browser:**
+
+1. Click the **Sync: off** pill in the topbar.
+2. Follow the link to create a [personal access token](https://github.com/settings/tokens/new?scopes=gist&description=Reveal+Editor+Sync) with the `gist` scope only — nothing else. Copy the token.
+3. Paste the token. Leave **Existing gist ID** blank to create a new private gist, or paste an ID if you already set up one machine.
+4. Click **Connect**. The first push uploads your current projects; on the second machine, the first pull brings them down.
+
+**Behavior:**
+
+- Auto-pull on load, auto-push ~3 seconds after edits stop. Per-project merges use `modifiedAt` — newest wins.
+- Deletions sync via tombstones — delete on one machine, the project disappears on the other after its next sync.
+- One gist file per project (`<uid>.json`) plus a `_library.json` for metadata. Same shape as the manual `.json` export, so you can also pull the gist from GitHub if you need a backup.
+- A **Reset gist** button replaces remote state with this browser's state — useful if the gist gets into a weird mixed state.
+- A **Disconnect** button clears the token and gist ID from this browser. Your data stays where it is; the next browser/sync still works.
+
+**Caveats:**
+
+- The PAT lives in `localStorage`. Any XSS on this site could exfiltrate it. The `gist` scope limits the damage — an attacker could only read/write your gists, not your repos or anything else.
+- If you edit on both machines simultaneously, last-write-wins per project means one set of edits gets overwritten. Sync once before starting on a new machine.
+- GitHub's API rate limit is 5,000 requests/hour for authenticated users — far more than this editor will ever use.
 
 If you're upgrading from an older single-slot version, your previous deck migrates automatically on first load.
 

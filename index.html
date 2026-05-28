@@ -5,7 +5,7 @@
 <!-- CSP must be the first non-charset element in <head> so it applies to all
      subsequent resource loads. Mirrors what .htaccess sends on Apache hosts;
      this meta tag is what enforces it on static hosts like GitHub Pages. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net https://api.github.com; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reveal Editor</title>
@@ -39,6 +39,7 @@
     <button id="btn-projects" type="button" title="Manage saved projects">Projects…</button>
     <button id="btn-new" type="button" title="New deck">+ New</button>
     <span id="status" class="status"></span>
+    <button id="btn-sync" type="button" class="sync-pill" title="Sync to GitHub Gist">Sync: off</button>
   </div>
   <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings">⚙</button>
   <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
@@ -190,6 +191,47 @@
       </label>
     </div>
     <ul id="projects-list" class="projects-list" aria-label="Saved projects"></ul>
+  </div>
+</div>
+
+<div id="sync-modal" class="modal sync-modal" hidden>
+  <div class="sync-card">
+    <div class="modal-head">
+      <strong>Sync via GitHub Gist</strong>
+      <button type="button" id="sync-close">Close</button>
+    </div>
+    <div class="sync-body">
+      <div id="sync-setup" class="sync-section">
+        <p>Sync this editor's projects across machines by pushing them to a private <a href="https://gist.github.com" target="_blank" rel="noopener noreferrer">GitHub Gist</a>. Nothing else has access — the token below stays in this browser only.</p>
+        <ol class="sync-steps">
+          <li><a id="sync-token-link" href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Reveal+Editor+Sync" target="_blank" rel="noopener noreferrer">Create a personal access token</a> with the <code>gist</code> scope only. Copy the token.</li>
+          <li>Paste it below. Optionally paste an existing gist ID; otherwise a new private gist is created for you.</li>
+        </ol>
+        <label class="sync-field">
+          <span>Personal access token</span>
+          <input id="sync-pat" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="sync-field">
+          <span>Existing gist ID <em>(optional)</em></span>
+          <input id="sync-gist-id" type="text" placeholder="leave blank to create a new gist" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="sync-actions">
+          <button type="button" id="sync-connect">Connect</button>
+        </div>
+      </div>
+
+      <div id="sync-connected" class="sync-section" hidden>
+        <p class="sync-status-line">Status: <span id="sync-status-text">idle</span></p>
+        <p class="sync-status-line">Last sync: <span id="sync-last">never</span></p>
+        <p class="sync-status-line">Gist: <a id="sync-gist-link" href="#" target="_blank" rel="noopener noreferrer">view on GitHub</a></p>
+        <p id="sync-error" class="sync-error" hidden></p>
+        <div class="sync-actions">
+          <button type="button" id="sync-now">Sync now</button>
+          <button type="button" id="sync-reset" class="danger">Reset gist (push local over remote)</button>
+          <button type="button" id="sync-disconnect" class="danger">Disconnect</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
