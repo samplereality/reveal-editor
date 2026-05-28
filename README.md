@@ -46,8 +46,10 @@ If you bounce between machines, the **Sync** pill in the topbar lets you mirror 
 
 1. Click the **Sync: off** pill in the topbar.
 2. Follow the link to create a [personal access token](https://github.com/settings/tokens/new?scopes=gist&description=Reveal+Editor+Sync) with the `gist` scope only — nothing else. Copy the token.
-3. Paste the token. Leave **Existing gist ID** blank to create a new private gist, or paste an ID if you already set up one machine.
-4. Click **Connect**. The first push uploads your current projects; on the second machine, the first pull brings them down.
+3. Paste the token. Leave **Existing gist ID** blank to create a new private gist, or paste an ID if you already set up another machine.
+4. Click **Connect**. The first push uploads your current projects; on subsequent machines, the first pull brings them down.
+
+**Linking a second machine:** open the Sync modal on the first machine and copy the gist ID shown there (there's a Copy button next to it). On the second machine, generate a *separate* PAT — recommended, since each token can be revoked independently if a machine is lost or compromised — paste the new token plus the gist ID, and click Connect. A single PAT shared across machines also works if you'd rather manage one token.
 
 **Behavior:**
 

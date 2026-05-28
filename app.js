@@ -71,6 +71,8 @@
     syncLast: $('#sync-last'),
     syncError: $('#sync-error'),
     syncGistLink: $('#sync-gist-link'),
+    syncGistIdDisplay: $('#sync-gist-id-display'),
+    syncCopyId: $('#sync-copy-id'),
     themeToggle: $('#btn-theme-toggle'),
     notesPopout: $('#btn-notes-popout'),
     notesPanel: $('#notes-panel'),
@@ -2794,6 +2796,7 @@ ${sections}
       els.syncStatusText.textContent = sync.status;
       els.syncLast.textContent = sync.lastSync ? formatRelative(sync.lastSync) : 'never';
       els.syncGistLink.href = `https://gist.github.com/${sync.gistId}`;
+      els.syncGistIdDisplay.textContent = sync.gistId;
       if (sync.error) {
         els.syncError.hidden = false;
         els.syncError.textContent = sync.error;
@@ -3007,6 +3010,23 @@ ${sections}
     });
     els.syncConnect.addEventListener('click', syncConnect);
     els.syncNow.addEventListener('click', () => syncNow());
+    els.syncCopyId.addEventListener('click', async () => {
+      if (!sync.gistId) return;
+      try {
+        await navigator.clipboard.writeText(sync.gistId);
+        const original = els.syncCopyId.textContent;
+        els.syncCopyId.textContent = 'Copied';
+        setTimeout(() => { els.syncCopyId.textContent = original; }, 1200);
+      } catch {
+        // Clipboard API needs a secure context or permission — fall back to
+        // selecting the text so the user can copy it manually.
+        const range = document.createRange();
+        range.selectNodeContents(els.syncGistIdDisplay);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
     els.syncReset.addEventListener('click', syncResetGist);
     els.syncDisconnect.addEventListener('click', () => {
       if (confirm('Disconnect sync? The token and gist ID will be cleared from this browser. Your data and the gist itself stay where they are.')) {
