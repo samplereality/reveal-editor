@@ -54,6 +54,7 @@ If you bounce between machines, the **Sync** pill in the topbar lets you mirror 
 **Behavior:**
 
 - Auto-pull on load, auto-push ~3 seconds after edits stop. Per-project merges use `modifiedAt` — newest wins.
+- **Auto-sync never overwrites the project you're currently editing**, even if the remote claims to be newer — this protects in-progress edits from being clobbered by a stale state from another machine or by clock-skew between devices. Background projects still merge normally. To force-update the open project from remote, click **Sync now** or reload the editor.
 - Deletions sync via tombstones — delete on one machine, the project disappears on the other after its next sync.
 - One gist file per project (`<uid>.json`) plus a `_library.json` for metadata. Same shape as the manual `.json` export, so you can also pull the gist from GitHub if you need a backup.
 - A **Reset gist** button replaces remote state with this browser's state — useful if the gist gets into a weird mixed state.

@@ -1805,6 +1805,12 @@ ${sections}
       slides: p.slides,
       currentId: p.currentId,
       config: p.config,
+      // Preserve timestamps so the per-project last-write-wins merge in sync
+      // actually compares the correct values. Without these, a pulled project
+      // gets stamped Date.now() by normalizeProject and always looks "newer"
+      // than the local in-progress version — overwriting unsaved edits.
+      createdAt: p.createdAt,
+      modifiedAt: p.modifiedAt,
     };
   }
 
@@ -2665,8 +2671,11 @@ ${sections}
     sync.inFlight = (async () => {
       try {
         // Pull first, then push the merged state — keeps both sides in lockstep.
+        // On silent (auto) syncs, protect the open project from being clobbered
+        // by remote state — prevents the user's in-progress edits from being
+        // reverted mid-stream. Manual "Sync now" still replaces everything.
         const remoteBefore = await gistGet(sync.gistId);
-        applyPulledGist(remoteBefore);
+        applyPulledGist(remoteBefore, { protectOpen: silent });
         await syncPush(remoteBefore);
         sync.lastSync = Date.now();
         sync.status = 'idle';
@@ -2686,7 +2695,10 @@ ${sections}
   }
 
   // Pulled-gist application split out so syncNow can reuse the fetched data.
-  function applyPulledGist(remote) {
+  // `protectOpen` skips replacing the currently-open project even if remote
+  // looks newer — protects in-progress edits from clock-skew or simultaneous
+  // edits on another machine during an auto-push cycle.
+  function applyPulledGist(remote, { protectOpen = false } = {}) {
     if (!remote || !remote.files) return;
     const files = remote.files;
     const remoteLib = parseLibraryGist(files[SYNC_LIBRARY_FILE]);
@@ -2703,8 +2715,10 @@ ${sections}
     const tombstones = mergeTombstones(library.deletedIds, remoteLib.deletedIds);
     const tombMap = new Map(tombstones.map(t => [t.id, t.deletedAt || 0]));
     const localById = new Map(library.projects.map(p => [p.id, p]));
+    const openId = state && state.id;
 
     for (const p of [...library.projects]) {
+      if (protectOpen && p.id === openId) continue;
       const ts = tombMap.get(p.id);
       if (ts && ts > (p.modifiedAt || 0)) {
         const idx = library.projects.indexOf(p);
@@ -2721,6 +2735,7 @@ ${sections}
         library.projects.push(rp);
         markDirty(rp.id);
       } else if ((rp.modifiedAt || 0) > (lp.modifiedAt || 0)) {
+        if (protectOpen && lp.id === openId) continue;
         Object.assign(lp, rp);
         if (state && state.id === lp.id) renderAll();
       }
