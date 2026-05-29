@@ -444,8 +444,8 @@
     menu.innerHTML = '';
 
     const items = [
-      { label: 'Insert slide above', action: () => insertSlideAt(idx) },
-      { label: 'Insert slide below', action: () => insertSlideAt(idx + 1) },
+      { label: 'Insert slide above', action: () => insertSlideAt(idx, slide.vertical) },
+      { label: 'Insert slide below', action: () => insertSlideAt(idx + 1, slide.vertical) },
       { label: 'Duplicate', action: () => duplicateSlide(slideId) },
       { sep: true },
       {
@@ -492,9 +492,13 @@
     if (!els.slideMenu.hidden) els.slideMenu.hidden = true;
   }
 
-  function insertSlideAt(idx) {
+  function insertSlideAt(idx, vertical = false) {
     recordHistory();
     const s = newSlide('');
+    // Inherit hierarchy from the clicked slide — inserting around a vertical
+    // sub-slide keeps the new slide in the same vertical group rather than
+    // breaking out to a new horizontal column. Slot 0 can never be vertical.
+    if (vertical && idx > 0) s.vertical = true;
     state.slides.splice(idx, 0, s);
     state.currentId = s.id;
     renderAll();
