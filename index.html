@@ -39,10 +39,12 @@
     <button id="btn-projects" type="button" title="Manage saved projects">Projects…</button>
     <button id="btn-new" type="button" title="New deck">+ New</button>
     <span id="status" class="status"></span>
-    <button id="btn-sync" type="button" class="sync-pill" title="Sync to GitHub Gist">Sync: off</button>
   </div>
-  <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings">⚙</button>
-  <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
+  <div class="topbar-utility">
+    <button id="btn-sync" type="button" class="sync-pill" title="Sync to GitHub Gist">Sync: off</button>
+    <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings">⚙</button>
+    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
+  </div>
 </header>
 
 <main class="layout">
@@ -191,6 +193,14 @@
       </label>
     </div>
     <ul id="projects-list" class="projects-list" aria-label="Saved projects"></ul>
+    <div id="projects-remote-section" class="projects-remote" hidden>
+      <div class="projects-remote-head">
+        <strong>On the gist</strong>
+        <button type="button" id="projects-remote-refresh" title="Re-fetch the gist">↻ Refresh</button>
+      </div>
+      <p id="projects-remote-status" class="projects-remote-status"></p>
+      <ul id="projects-remote-list" class="projects-list" aria-label="Projects on the gist"></ul>
+    </div>
   </div>
 </div>
 

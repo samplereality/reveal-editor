@@ -44,6 +44,10 @@
     projectsNew: $('#projects-new'),
     projectsExportAll: $('#projects-export-all'),
     projectsImportInput: $('#projects-import-input'),
+    projectsRemoteSection: $('#projects-remote-section'),
+    projectsRemoteList: $('#projects-remote-list'),
+    projectsRemoteStatus: $('#projects-remote-status'),
+    projectsRemoteRefresh: $('#projects-remote-refresh'),
     previewModal: $('#preview-modal'),
     previewFrame: $('#preview-frame'),
     previewClose: $('#preview-close'),
@@ -1871,7 +1875,14 @@ ${sections}
   async function importJsonFile(file) {
     const text = await file.text();
     const data = JSON.parse(text);
-    const p = normalizeProject({ ...data, id: uid() }, file.name.replace(/\.json$/i, ''));
+    // Preserve the original ID if present — required for cross-machine sync
+    // to recognize this as the same project. Only allocate a fresh ID if the
+    // file has none, or if the ID collides with an existing local project
+    // (in which case treat as a deliberate duplicate).
+    const incomingId = data.id;
+    const collides = incomingId && library.projects.some(p => p.id === incomingId);
+    const id = (incomingId && !collides) ? incomingId : uid();
+    const p = normalizeProject({ ...data, id }, file.name.replace(/\.json$/i, ''));
     if (!p) throw new Error('Not a valid project file');
     library.projects.push(p);
     markDirty(p.id);
@@ -1989,7 +2000,10 @@ ${sections}
       try {
         const text = await entry.async('string');
         const data = JSON.parse(text);
-        const p = normalizeProject({ ...data, id: uid() }, entry.name.replace(/\.json$/i, ''));
+        const incomingId = data.id;
+        const collides = incomingId && library.projects.some(p => p.id === incomingId);
+        const id = (incomingId && !collides) ? incomingId : uid();
+        const p = normalizeProject({ ...data, id }, entry.name.replace(/\.json$/i, ''));
         if (p) {
           library.projects.push(p);
           markDirty(p.id);
@@ -2228,11 +2242,121 @@ ${sections}
     captureCurrentContent();
     saveLibrary();
     renderProjectsList();
+    refreshRemoteProjectsList();
     els.projectsModal.hidden = false;
   }
 
   function closeProjectsModal() {
     els.projectsModal.hidden = true;
+  }
+
+  // -------- Gist contents in Projects modal --------
+  async function refreshRemoteProjectsList() {
+    const section = els.projectsRemoteSection;
+    if (sync.status === 'off' || !sync.gistId) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    els.projectsRemoteStatus.textContent = 'Fetching gist…';
+    els.projectsRemoteList.innerHTML = '';
+    try {
+      const remote = await gistGet(sync.gistId);
+      const files = remote.files || {};
+      const items = [];
+      for (const name of Object.keys(files)) {
+        if (name === SYNC_LIBRARY_FILE) continue;
+        const file = files[name];
+        let parsed = null;
+        try { parsed = JSON.parse(file.content); } catch {}
+        if (!parsed) continue;
+        const idFromName = name.replace(/\.json$/i, '');
+        const id = parsed.id || idFromName;
+        items.push({
+          id,
+          filename: name,
+          name: parsed.name || parsed.title || '(untitled)',
+          title: parsed.title || parsed.name || '(untitled)',
+          modifiedAt: parsed.modifiedAt || 0,
+          slideCount: Array.isArray(parsed.slides) ? parsed.slides.length : 0,
+        });
+      }
+      items.sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
+      renderRemoteProjects(items);
+    } catch (e) {
+      els.projectsRemoteStatus.textContent = 'Failed to fetch gist: ' + (e.message || e);
+      els.projectsRemoteList.innerHTML = '';
+    }
+  }
+
+  function renderRemoteProjects(items) {
+    const list = els.projectsRemoteList;
+    list.innerHTML = '';
+    if (items.length === 0) {
+      els.projectsRemoteStatus.textContent = 'No projects on the gist yet.';
+      return;
+    }
+    const localById = new Map(library.projects.map(p => [p.id, p]));
+    // Index local projects by lowercased name for duplicate detection.
+    const localByName = new Map();
+    for (const lp of library.projects) {
+      const key = (lp.name || lp.title || '').trim().toLowerCase();
+      if (!key) continue;
+      if (!localByName.has(key)) localByName.set(key, []);
+      localByName.get(key).push(lp);
+    }
+
+    let matches = 0, orphans = 0, dupes = 0;
+    for (const r of items) {
+      const li = document.createElement('li');
+      const local = localById.get(r.id);
+      const nameKey = (r.name || '').trim().toLowerCase();
+      const sameNameLocals = localByName.get(nameKey) || [];
+      const sameNameDifferentId = sameNameLocals.some(lp => lp.id !== r.id);
+
+      const name = document.createElement('div');
+      name.className = 'proj-name';
+      name.textContent = r.title || r.name;
+      name.title = r.name;
+      // Make it look like text (not editable) — it's read-only here.
+      name.style.background = 'transparent';
+      name.style.border = '1px solid transparent';
+
+      const meta = document.createElement('div');
+      meta.className = 'proj-meta';
+      const idSpan = document.createElement('span');
+      idSpan.className = 'proj-id';
+      idSpan.textContent = `id ${r.id.slice(0, 8)}…`;
+      idSpan.title = r.id;
+      meta.textContent = `${r.slideCount} slide${r.slideCount === 1 ? '' : 's'} · ${formatRelative(r.modifiedAt)} · `;
+      meta.appendChild(idSpan);
+
+      const tag = document.createElement('span');
+      tag.className = 'proj-tag';
+      if (local) {
+        tag.classList.add('match');
+        tag.textContent = 'synced';
+        matches++;
+      } else if (sameNameDifferentId) {
+        tag.classList.add('duplicate');
+        tag.textContent = 'duplicate id';
+        dupes++;
+      } else {
+        tag.classList.add('orphan');
+        tag.textContent = 'remote only';
+        orphans++;
+      }
+      name.appendChild(tag);
+
+      li.appendChild(name);
+      li.appendChild(meta);
+      list.appendChild(li);
+    }
+    const parts = [`${items.length} project${items.length === 1 ? '' : 's'} on gist`];
+    if (matches) parts.push(`${matches} synced`);
+    if (dupes) parts.push(`${dupes} same-name but different id`);
+    if (orphans) parts.push(`${orphans} remote-only`);
+    els.projectsRemoteStatus.textContent = parts.join(' · ');
   }
 
   function renderProjectsList() {
@@ -3054,6 +3178,7 @@ ${sections}
     els.projectsClose.addEventListener('click', closeProjectsModal);
     els.projectsNew.addEventListener('click', newProject);
     els.projectsExportAll.addEventListener('click', exportAllAsZip);
+    els.projectsRemoteRefresh.addEventListener('click', refreshRemoteProjectsList);
     els.projectsImportInput.addEventListener('change', () => {
       const files = els.projectsImportInput.files;
       if (files && files.length) importFiles(files);
