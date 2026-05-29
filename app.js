@@ -390,7 +390,7 @@
 
       const label = document.createElement('span');
       label.className = 'label';
-      label.textContent = slideLabel(slide);
+      renderLabelInto(label, slideLabel(slide));
 
       const del = document.createElement('button');
       del.type = 'button';
@@ -550,11 +550,13 @@
     return v > 0 ? `${h}.${v}` : String(h);
   }
 
+  // Returns { icon, text } so renderers can put a Phosphor <i> next to the
+  // text instead of mixing emoji into the textContent.
   function slideLabel(slide) {
     const tmp = document.createElement('div');
     tmp.innerHTML = slide.content;
     const txt = (tmp.textContent || '').trim().replace(/\s+/g, ' ');
-    if (txt) return txt.length > 48 ? txt.slice(0, 48) + '…' : txt;
+    if (txt) return { icon: null, text: txt.length > 48 ? txt.slice(0, 48) + '…' : txt };
     const media = tmp.querySelector('img, video, iframe');
     if (media) {
       const tag = media.tagName.toLowerCase();
@@ -566,10 +568,15 @@
     if (slide.background && slide.background.type && slide.background.value) {
       return backgroundLabel(slide.background);
     }
-    return '(empty)';
+    return { icon: null, text: '(empty)' };
   }
 
-  const BG_ICONS = { image: '🖼', video: '🎬', iframe: '🌐', color: '🎨' };
+  const BG_ICONS = {
+    image: 'ph-image',
+    video: 'ph-video-camera',
+    iframe: 'ph-globe',
+    color: 'ph-paint-brush',
+  };
 
   function backgroundLabel(bg) {
     const type = bg.type;
@@ -591,8 +598,18 @@
       }
     }
     if (hint.length > 40) hint = hint.slice(0, 37) + '…';
-    const icon = BG_ICONS[type] || '•';
-    return `${icon} ${hint}`;
+    return { icon: BG_ICONS[type] || null, text: hint };
+  }
+
+  // Renders a {icon, text} label into a DOM element, replacing its contents.
+  function renderLabelInto(el, label) {
+    el.replaceChildren();
+    if (label.icon) {
+      const i = document.createElement('i');
+      i.className = 'ph ' + label.icon + ' label-icon';
+      el.appendChild(i);
+    }
+    el.appendChild(document.createTextNode(label.text));
   }
 
   function renderEditor() {
@@ -655,7 +672,14 @@
     }
 
     const display = value.length > 80 ? value.slice(0, 77) + '…' : value;
-    badge.textContent = `${label}: ${display}`;
+    badge.replaceChildren();
+    const iconClass = BG_ICONS[type];
+    if (iconClass) {
+      const i = document.createElement('i');
+      i.className = 'ph ' + iconClass;
+      badge.appendChild(i);
+    }
+    badge.appendChild(document.createTextNode(`${label}: ${display}`));
     badge.hidden = false;
   }
 
@@ -963,8 +987,21 @@
         break;
       }
       case 'image':
+        // Make sure no stale linked-image href is hanging around from a
+        // canceled flow.
+        delete els.fileInput.dataset.linkHref;
         els.fileInput.click();
         break;
+      case 'linked-image': {
+        const url = prompt(
+          'Open this URL in a new window when the image is clicked:',
+          'https://',
+        );
+        if (!url || url === 'https://') break;
+        els.fileInput.dataset.linkHref = url;
+        els.fileInput.click();
+        break;
+      }
       case 'hr':
         insertHTMLAtCursor('<hr><p></p>');
         break;
@@ -1241,7 +1278,7 @@
     }
     // Update sidebar label
     const li = els.slideList.querySelector(`li[data-id="${state.currentId}"] .label`);
-    if (li) li.textContent = slideLabel(currentSlide());
+    if (li) renderLabelInto(li, slideLabel(currentSlide()));
     scheduleSave();
   }
 
@@ -1328,7 +1365,7 @@
     return { dataUrl: await blobToDataUrl(blob), origSize: orig, newSize: blob.size, skipped: false };
   }
 
-  async function insertImageFromFile(file) {
+  async function insertImageFromFile(file, linkHref = null) {
     if (!file || !file.type.startsWith('image/')) return;
     let result;
     try {
@@ -1337,7 +1374,10 @@
       console.warn('image optimize failed; using original', e);
       result = { dataUrl: await fileToDataUrl(file), origSize: file.size, newSize: file.size, skipped: true };
     }
-    const tag = `<img src="${result.dataUrl}" alt="">`;
+    const imgTag = `<img src="${result.dataUrl}" alt="">`;
+    const tag = linkHref
+      ? `<a href="${escapeAttr(linkHref)}" target="_blank" rel="noopener noreferrer" class="linked-image">${imgTag}</a>`
+      : imgTag;
     if (sourceMode) {
       const ta = els.source;
       const pos = ta.selectionStart;
@@ -1433,6 +1473,37 @@ ${sections}
 <script src="${notesJs}"><\/script>
 <script>
   Reveal.initialize(${initOpts})${startCall};
+  // Click handler for <a class="linked-image"> elements — open the URL in a
+  // sized, centered popup window over the presentation rather than a new tab.
+  // Capture phase + stopImmediatePropagation prevents any other listener from
+  // also acting on the click; if a fullscreen element is active, exit it
+  // first because browsers won't honor sized popup features in fullscreen.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a.linked-image');
+    if (!a) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var href = a.getAttribute('href');
+    if (!href) return;
+    function openWindow() {
+      var w = Math.min(window.innerWidth - 80, 1200);
+      var h = Math.min(window.innerHeight - 80, 800);
+      var left = (window.screenX || 0) + Math.max(0, (window.innerWidth - w) / 2);
+      var top = (window.screenY || 0) + Math.max(0, (window.innerHeight - h) / 2);
+      var features = 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top;
+      // Deliberately not calling .focus() on the popup: macOS won't raise it
+      // visually anyway, and calling focus() registers it as Chrome's active
+      // window — which then makes the Cmd-backtick window cycler skip past
+      // it on the first press. Without focus(), the opener stays active and
+      // Cmd-backtick cycles straight to the buried popup on the first press.
+      window.open(href, 'reveal-linked-preview', features);
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      Promise.resolve(document.exitFullscreen()).then(openWindow, openWindow);
+    } else {
+      openWindow();
+    }
+  }, true);
 <\/script>
 </body>
 </html>`;
@@ -2481,7 +2552,13 @@ ${sections}
     const light = mode === 'light';
     document.body.classList.toggle('light', light);
     if (els.themeToggle) {
-      els.themeToggle.textContent = light ? '☾' : '☀';
+      // Light mode shows a moon (click to go dark); dark mode shows a sun
+      // (click to go light). Phosphor icon classes are toggled on the <i>.
+      const icon = els.themeToggle.querySelector('i');
+      if (icon) {
+        icon.classList.toggle('ph-moon', light);
+        icon.classList.toggle('ph-sun', !light);
+      }
       els.themeToggle.title = light ? 'Switch to dark mode' : 'Switch to light mode';
     }
   }
@@ -2589,21 +2666,43 @@ ${sections}
     renderSyncModal();
   }
 
+  const SYNC_ICONS = {
+    off: 'ph-cloud-slash',
+    syncing: 'ph-spinner-gap',
+    error: 'ph-cloud-warning',
+    ok: 'ph-cloud-check',
+    idle: 'ph-cloud',
+  };
+
   function updateSyncPill() {
     const pill = els.syncPill;
     pill.classList.remove('is-syncing', 'is-error', 'is-ok');
+    let label, iconKey;
     if (sync.status === 'off') {
-      pill.textContent = 'Sync: off';
+      label = 'Sync: off';
+      iconKey = 'off';
     } else if (sync.status === 'syncing') {
-      pill.textContent = 'Syncing…';
+      label = 'Syncing…';
+      iconKey = 'syncing';
       pill.classList.add('is-syncing');
     } else if (sync.status === 'error') {
-      pill.textContent = 'Sync error';
+      label = 'Sync error';
+      iconKey = 'error';
       pill.classList.add('is-error');
     } else {
-      pill.textContent = sync.lastSync ? `Synced ${formatRelative(sync.lastSync)}` : 'Sync: ready';
-      if (sync.lastSync && Date.now() - sync.lastSync < 60000) pill.classList.add('is-ok');
+      label = sync.lastSync ? `Synced ${formatRelative(sync.lastSync)}` : 'Sync: ready';
+      const fresh = sync.lastSync && Date.now() - sync.lastSync < 60000;
+      iconKey = fresh ? 'ok' : 'idle';
+      if (fresh) pill.classList.add('is-ok');
     }
+    const icon = pill.querySelector('.sync-icon');
+    const labelEl = pill.querySelector('.sync-label');
+    if (icon) {
+      // Reset to base classes, then add the state icon.
+      icon.className = 'ph sync-icon ' + SYNC_ICONS[iconKey];
+    }
+    if (labelEl) labelEl.textContent = label;
+    else pill.textContent = label;
   }
 
   async function gistFetch(path, init = {}) {
@@ -3109,7 +3208,9 @@ ${sections}
 
     els.fileInput.addEventListener('change', () => {
       const file = els.fileInput.files && els.fileInput.files[0];
-      if (file) insertImageFromFile(file);
+      const linkHref = els.fileInput.dataset.linkHref || null;
+      delete els.fileInput.dataset.linkHref;
+      if (file) insertImageFromFile(file, linkHref);
       els.fileInput.value = '';
     });
 

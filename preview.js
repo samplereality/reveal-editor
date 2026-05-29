@@ -93,4 +93,36 @@
       render(d);
     });
   }
+
+  // Click handler for <a class="linked-image"> elements — open the URL in a
+  // sized, centered popup window over the presentation rather than a new tab.
+  // Capture phase + stopImmediatePropagation prevents any other listener from
+  // also acting on the click; if a fullscreen element is active, exit it
+  // first because browsers won't honor sized popup features in fullscreen.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a.linked-image');
+    if (!a) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var href = a.getAttribute('href');
+    if (!href) return;
+    function openWindow() {
+      var w = Math.min(window.innerWidth - 80, 1200);
+      var h = Math.min(window.innerHeight - 80, 800);
+      var left = (window.screenX || 0) + Math.max(0, (window.innerWidth - w) / 2);
+      var top = (window.screenY || 0) + Math.max(0, (window.innerHeight - h) / 2);
+      var features = 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top;
+      // Deliberately not calling .focus() on the popup: macOS won't raise it
+      // visually anyway, and calling focus() registers it as Chrome's active
+      // window — which then makes Cmd+` skip past it on the first press.
+      // Without focus(), the opener stays active and Cmd+` cycles straight
+      // to the buried popup on the first keystroke.
+      window.open(href, 'reveal-linked-preview', features);
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      Promise.resolve(document.exitFullscreen()).then(openWindow, openWindow);
+    } else {
+      openWindow();
+    }
+  }, true);
 })();

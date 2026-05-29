@@ -9,6 +9,9 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reveal Editor</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css"
+      integrity="sha384-6p9AefaqUhEVheRlj1mpAkbngHXy9mbYMrIdcIt4Jlc9lOLIablJq3bBsLOjGwZ7"
+      crossorigin="anonymous">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -41,9 +44,9 @@
     <span id="status" class="status"></span>
   </div>
   <div class="topbar-utility">
-    <button id="btn-sync" type="button" class="sync-pill" title="Sync to GitHub Gist">Sync: off</button>
-    <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings">⚙</button>
-    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
+    <button id="btn-sync" type="button" class="sync-pill" title="Sync to GitHub Gist"><i class="ph ph-cloud-slash sync-icon" aria-hidden="true"></i><span class="sync-label">Sync: off</span></button>
+    <button id="btn-settings" type="button" title="reveal.js settings for this deck" aria-label="Settings"><i class="ph ph-gear-six"></i></button>
+    <button id="btn-theme-toggle" type="button" title="Toggle light/dark mode" aria-label="Toggle light/dark mode"><i class="ph ph-moon"></i></button>
   </div>
 </header>
 
@@ -61,31 +64,32 @@
 
   <section class="editor">
     <div class="toolbar" id="toolbar">
-      <button type="button" id="btn-undo" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
-      <button type="button" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+      <button type="button" id="btn-undo" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" disabled><i class="ph ph-arrow-arc-left"></i></button>
+      <button type="button" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo" disabled><i class="ph ph-arrow-arc-right"></i></button>
       <span class="sep"></span>
-      <button type="button" data-cmd="formatBlock" data-arg="h1" title="Heading 1">H1</button>
-      <button type="button" data-cmd="formatBlock" data-arg="h2" title="Heading 2">H2</button>
-      <button type="button" data-cmd="formatBlock" data-arg="h3" title="Heading 3">H3</button>
-      <button type="button" data-cmd="formatBlock" data-arg="p" title="Paragraph">P</button>
+      <button type="button" data-cmd="formatBlock" data-arg="h1" title="Heading 1" aria-label="Heading 1"><i class="ph ph-text-h-one"></i></button>
+      <button type="button" data-cmd="formatBlock" data-arg="h2" title="Heading 2" aria-label="Heading 2"><i class="ph ph-text-h-two"></i></button>
+      <button type="button" data-cmd="formatBlock" data-arg="h3" title="Heading 3" aria-label="Heading 3"><i class="ph ph-text-h-three"></i></button>
+      <button type="button" data-cmd="formatBlock" data-arg="p" title="Paragraph" aria-label="Paragraph"><i class="ph ph-paragraph"></i></button>
       <span class="sep"></span>
-      <button type="button" data-cmd="bold" title="Bold (Ctrl/Cmd+B)"><b>B</b></button>
-      <button type="button" data-cmd="italic" title="Italic (Ctrl/Cmd+I)"><i>I</i></button>
-      <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
-      <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+      <button type="button" data-cmd="bold" title="Bold (Ctrl/Cmd+B)" aria-label="Bold"><i class="ph ph-text-b"></i></button>
+      <button type="button" data-cmd="italic" title="Italic (Ctrl/Cmd+I)" aria-label="Italic"><i class="ph ph-text-italic"></i></button>
+      <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><i class="ph ph-text-underline"></i></button>
+      <button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><i class="ph ph-text-strikethrough"></i></button>
       <span class="sep"></span>
-      <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">&bull; List</button>
-      <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
-      <button type="button" data-action="blockquote" title="Blockquote">&ldquo; &rdquo;</button>
-      <button type="button" data-action="code-inline" title="Inline code">&lt;/&gt;</button>
-      <button type="button" data-action="code-block" title="Code block">{ }</button>
+      <button type="button" data-cmd="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list"><i class="ph ph-list-bullets"></i></button>
+      <button type="button" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list"><i class="ph ph-list-numbers"></i></button>
+      <button type="button" data-action="blockquote" title="Blockquote" aria-label="Blockquote"><i class="ph ph-quotes"></i></button>
+      <button type="button" data-action="code-inline" title="Inline code" aria-label="Inline code"><i class="ph ph-code"></i></button>
+      <button type="button" data-action="code-block" title="Code block" aria-label="Code block"><i class="ph ph-code-block"></i></button>
       <span class="sep"></span>
-      <button type="button" data-action="link" title="Link">Link</button>
-      <button type="button" data-action="image" title="Insert image">Image</button>
-      <button type="button" data-action="hr" title="Horizontal rule">HR</button>
+      <button type="button" data-action="link" title="Link" aria-label="Link"><i class="ph ph-link"></i></button>
+      <button type="button" data-action="image" title="Insert image" aria-label="Insert image"><i class="ph ph-image"></i></button>
+      <button type="button" data-action="linked-image" title="Linked image — clicks open a URL in a new window during the presentation (use for sites that refuse iframe embedding)" aria-label="Linked image"><i class="ph ph-image"></i><i class="ph ph-arrow-square-out btn-badge"></i></button>
+      <button type="button" data-action="hr" title="Horizontal rule" aria-label="Horizontal rule"><i class="ph ph-minus"></i></button>
       <span class="sep"></span>
-      <button type="button" data-action="fit-text" title="Fit text to slide (r-fit-text)">Fit</button>
-      <button type="button" data-action="stretch" title="Stretch to fill slide (r-stretch)">Stretch</button>
+      <button type="button" data-action="fit-text" title="Fit text to slide (r-fit-text)" aria-label="Fit text"><i class="ph ph-text-aa"></i></button>
+      <button type="button" data-action="stretch" title="Stretch to fill slide (r-stretch)" aria-label="Stretch to fill"><i class="ph ph-arrows-out-line-vertical"></i></button>
       <span class="sep"></span>
       <select id="fragment-type" class="toolbar-select" title="Fragment animation">
         <option value="">fade-in</option>
@@ -104,10 +108,10 @@
         <option value="highlight-blue">highlight-blue</option>
         <option value="highlight-current-red">highlight-current-red</option>
       </select>
-      <button type="button" data-action="fragment" title="Toggle fragment on current block, or wrap selection. Click again to remove.">Fragment</button>
+      <button type="button" data-action="fragment" title="Toggle fragment on current block, or wrap selection. Click again to remove." aria-label="Fragment"><i class="ph ph-magic-wand"></i></button>
       <span class="sep"></span>
-      <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
-      <button type="button" id="toggle-source" title="Toggle HTML source">&lt;/&gt; Source</button>
+      <button type="button" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting"><i class="ph ph-eraser"></i></button>
+      <button type="button" id="toggle-source" title="Toggle HTML source" aria-label="Toggle HTML source"><i class="ph ph-brackets-angle"></i></button>
     </div>
 
     <div class="stage">
