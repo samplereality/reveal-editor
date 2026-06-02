@@ -2336,7 +2336,7 @@ ${sections}
     els.projectsRemoteStatus.textContent = 'Fetching gist…';
     els.projectsRemoteList.innerHTML = '';
     try {
-      const remote = await gistGet(sync.gistId);
+      const remote = await gistGetResolved(sync.gistId);
       const files = remote.files || {};
       const items = [];
       for (const name of Object.keys(files)) {
@@ -2729,6 +2729,27 @@ ${sections}
   }
 
   async function gistGet(id) { return gistFetch(`/gists/${id}`); }
+
+  // GitHub truncates any gist file larger than ~1 MB in the API response:
+  // `content` is cut off, `truncated` is true, and the full body lives at
+  // `raw_url`. Projects with embedded base64 images routinely exceed that, so
+  // resolve the full content before anything tries to JSON.parse it — otherwise
+  // large projects silently fail to parse and vanish from the sync/Projects list.
+  // raw_url for a secret gist is accessible without auth (and CORS-enabled), so
+  // we deliberately omit the token here to avoid a preflight.
+  async function gistGetResolved(id) {
+    const gist = await gistGet(id);
+    const files = gist.files || {};
+    await Promise.all(Object.values(files).map(async (file) => {
+      if (file && file.truncated && file.raw_url) {
+        try {
+          const r = await fetch(file.raw_url);
+          if (r.ok) file.content = await r.text();
+        } catch { /* leave truncated content; parse will skip it */ }
+      }
+    }));
+    return gist;
+  }
   async function gistPatch(id, files) {
     return gistFetch(`/gists/${id}`, { method: 'PATCH', body: JSON.stringify({ files }) });
   }
@@ -2794,7 +2815,7 @@ ${sections}
 
   // Pull the gist and merge it with the local library.
   async function syncPull() {
-    const remote = await gistGet(sync.gistId);
+    const remote = await gistGetResolved(sync.gistId);
     const files = remote.files || {};
     const libFile = files[SYNC_LIBRARY_FILE];
     const remoteLib = parseLibraryGist(libFile);
@@ -2901,7 +2922,7 @@ ${sections}
         // On silent (auto) syncs, protect the open project from being clobbered
         // by remote state — prevents the user's in-progress edits from being
         // reverted mid-stream. Manual "Sync now" still replaces everything.
-        const remoteBefore = await gistGet(sync.gistId);
+        const remoteBefore = await gistGetResolved(sync.gistId);
         applyPulledGist(remoteBefore, { protectOpen: silent });
         await syncPush(remoteBefore);
         sync.lastSync = Date.now();
@@ -2991,6 +3012,10 @@ ${sections}
     sync.status = 'syncing';
     updateSyncPill();
     renderSyncModal();
+    // Fold the open slide's in-flight edits into state before serializing, and
+    // cancel any pending auto-push so it can't race the reset PATCH.
+    captureCurrentContent();
+    if (sync.pushTimer) { clearTimeout(sync.pushTimer); sync.pushTimer = null; }
     try {
       const remote = await gistGet(sync.gistId);
       // Mark every existing remote file null, then add local files back.
@@ -3008,6 +3033,8 @@ ${sections}
     }
     updateSyncPill();
     renderSyncModal();
+    // Re-read the gist so the Projects list reflects the just-pushed state.
+    refreshRemoteProjectsList();
   }
 
   // Schedule a debounced push after local edits.
