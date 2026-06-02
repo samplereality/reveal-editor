@@ -937,3 +937,4 @@ body.light .sync-error { color: #b91c1c; }
 .about-body p { margin: 0 0 10px; }
 .about-body p:last-child { margin-bottom: 0; }
 .about-body a { color: var(--accent); }
+.about-version { color: var(--muted); font-size: 12px; }

@@ -2,6 +2,7 @@
 (async () => {
   'use strict';
 
+  const APP_VERSION = '1.0.0'; // semver — single source of truth for the About modal
   const REVEAL_VERSION = '5.1.0';
   const LIBRARY_KEY = 'reveal-editor:library:v1';
   const LEGACY_STORAGE_KEY = 'reveal-editor:project:v1';
@@ -55,6 +56,7 @@
     aboutButton: $('#btn-about'),
     aboutModal: $('#about-modal'),
     aboutClose: $('#about-close'),
+    aboutVersion: $('#about-version-number'),
     settingsButton: $('#btn-settings'),
     settingsModal: $('#settings-modal'),
     settingsClose: $('#settings-close'),
@@ -3259,6 +3261,7 @@ ${sections}
     els.notesPanelText.addEventListener('blur', endTextEditSession);
 
     // About modal
+    if (els.aboutVersion) els.aboutVersion.textContent = APP_VERSION;
     els.aboutButton.addEventListener('click', () => { els.aboutModal.hidden = false; });
     els.aboutClose.addEventListener('click', () => { els.aboutModal.hidden = true; });
     els.aboutModal.addEventListener('click', (e) => {
