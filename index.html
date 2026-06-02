@@ -5,7 +5,7 @@
 <!-- CSP must be the first non-charset element in <head> so it applies to all
      subsequent resource loads. Mirrors what .htaccess sends on Apache hosts;
      this meta tag is what enforces it on static hosts like GitHub Pages. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net https://api.github.com; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self' https://cdn.jsdelivr.net https://api.github.com https://gist.githubusercontent.com; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reveal Editor</title>

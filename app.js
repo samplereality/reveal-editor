@@ -2,7 +2,7 @@
 (async () => {
   'use strict';
 
-  const APP_VERSION = '1.0.0'; // semver — single source of truth for the About modal
+  const APP_VERSION = '1.0.1'; // semver — single source of truth for the About modal
   const REVEAL_VERSION = '5.1.0';
   const LIBRARY_KEY = 'reveal-editor:library:v1';
   const LEGACY_STORAGE_KEY = 'reveal-editor:project:v1';
@@ -2738,7 +2738,9 @@ ${sections}
   // resolve the full content before anything tries to JSON.parse it — otherwise
   // large projects silently fail to parse and vanish from the sync/Projects list.
   // raw_url for a secret gist is accessible without auth (and CORS-enabled), so
-  // we deliberately omit the token here to avoid a preflight.
+  // we deliberately omit the token here to avoid a preflight. NOTE: this fetch
+  // hits gist.githubusercontent.com — keep that host in the connect-src CSP
+  // directive (index.html meta + .htaccess header) or it gets blocked.
   async function gistGetResolved(id) {
     const gist = await gistGet(id);
     const files = gist.files || {};
