@@ -1,36 +1,27 @@
 # Reveal Editor
 
-A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentations. No build, no backend, no install — everything runs client-side in the browser, and your decks live in your own browser's storage.
+A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentations. There's no build or backend. Reveal Editor easily installs on Reclaim Hosting or any other shared hosting service. Everything runs client-side in the browser, and decks live in your own browser's storage. 
 
 **Live demo:** `https://slides.samplereality.com`
 
-<!-- Optional: drop a screenshot here once you have one.
-     ![Screenshot of the editor](docs/screenshot.png)
--->
+[Screenshot of the editor](reveal-editor.jpg)
 
 ## What it does
 
-- **Visual slide editing** with a familiar contenteditable surface. Toolbar for headings, lists, blockquotes, code, links, images, and horizontal rules. Source-mode toggle for raw HTML when you want it.
-- **Live theme preview.** The editor mirrors whatever reveal theme you pick (Black, White, Solarized, Sky, etc.) so the fonts and colors you see while editing match the rendered deck.
-- **Real `r-fit-text` and `r-stretch`.** The editor scales them in place just like reveal does at runtime — type a long headline and it shrinks to fit; resize the slide and the stretch element re-flows.
-- **Smart fragments.** A type dropdown in the toolbar (fade-up, grow, highlight-red, …) live-binds to whichever fragment the cursor is in. Change the dropdown to retype an existing fragment, click the button to toggle the whole thing on or off.
-- **Backgrounds.** Per-slide color, image, video, or iframe backgrounds. URLs only — no embedding required.
+- **Visual slide editing**
+- **Live theme preview.**
+- **Reveal.js formatting tools*** like `r-fit-text`, `r-stretch`, and `fragments`
+- **Slide Backgrounds.** Per-slide color, image, video, or iframe backgrounds. Embed entire webpages with just a URL.
 - **Vertical sub-slides.** Check "Vertical sub-slide" to nest under the previous one; reveal will lay them out as a vertical group.
 - **Speaker notes side panel.** Opens to the right of the slide so you can see the slide and notes at the same time. Notes also appear in the deck's reveal speaker view (press `S` during a preview).
-- **Reveal.js settings, per deck.** A **Settings…** button in the topbar opens a modal with a curated set of [reveal.js config options](https://revealjs.com/config/) (controls, progress, slide numbering, default transition, auto-advance, slide dimensions, etc.). Settings are stored on the project, travel with `.json` export/import, and apply to the live preview, the standalone HTML export, and the PDF export.
+- **Reveal.js settings, per deck.** Control [reveal.js config options](https://revealjs.com/config/). Settings are stored on the project, travel with `.json` export/import, and apply to the live preview, the standalone HTML export, and the PDF export.
 - **Multiple projects** with a Projects modal — open, duplicate, rename, delete, or export any of them.
-- **Import / Export.** Every saved project gets four per-row export buttons in the Projects modal:
-  - **`.json`** — re-importable project file (preserves everything, including backgrounds, transitions, and fragments).
-  - **`.html`** — standalone reveal.js deck with the notes plugin pre-wired.
-  - **`.md`** — reveal.js Markdown (slides separated by `---`, vertical sub-slides by `--`, speaker notes after `Note:`, slide attributes in `<!-- .slide: ... -->` comments). Round-trippable for most content; very HTML-heavy slides may lose formatting on export. If the deck contains inline images (data URIs from paste/drop), the download becomes a `.md.zip` with the markdown plus an `assets/` folder of extracted image files; importing that `.md.zip` re-inlines the assets.
-  - **`.pdf`** — opens the deck in reveal's `?print-pdf` view in a new tab and triggers the browser print dialog (Save as PDF).
-  - And **Export all (.zip)** for bundling every project as `.json` files in one archive.
-  - Imports accept `.json`, `.zip`, or `.md` files (drop multiple at once).
-- **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage — typical 5 MB phone photo lands as ~250 KB. Small icons and SVGs are left untouched.
+- **Import / Export.** Import from .json or .md. Export formats include .json, .html, .md, and .pdf
+- **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage. Small icons and SVGs are left untouched.
 
 ## How it stores your work
 
-Projects are saved to your browser's **IndexedDB**, which on modern browsers grants gigabytes per origin (vs. localStorage's ~5 MB). Each project is a separate IDB record, so editing one doesn't touch the others.
+Projects are saved to your browser's **IndexedDB**. Each project is a separate IDB record, so editing one doesn't touch the others.
 
 Side effects worth knowing:
 
@@ -40,7 +31,7 @@ Side effects worth knowing:
 
 ## Syncing across browsers
 
-If you bounce between machines, the **Sync** pill in the topbar lets you mirror your projects to a private GitHub Gist. The gist is the source of truth across machines; each browser pulls on load and auto-pushes a few seconds after every edit.
+If you bounce between machines, the **Sync** pill in the top bar lets you mirror your projects to a private GitHub Gist. The gist is the source of truth across machines; each browser pulls on load and auto-pushes a few seconds after every edit.
 
 **Setup, once per browser:**
 
@@ -62,11 +53,9 @@ If you bounce between machines, the **Sync** pill in the topbar lets you mirror 
 
 **Caveats:**
 
-- The PAT lives in `localStorage`. Any XSS on this site could exfiltrate it. The `gist` scope limits the damage — an attacker could only read/write your gists, not your repos or anything else.
+- The gist PAT lives in `localStorage`. Any XSS on this site could exfiltrate it. The `gist` scope limits the damage — an attacker could only read/write your gists, not your repos or anything else.
 - If you edit on both machines simultaneously, last-write-wins per project means one set of edits gets overwritten. Sync once before starting on a new machine.
-- GitHub's API rate limit is 5,000 requests/hour for authenticated users — far more than this editor will ever use.
-
-If you're upgrading from an older single-slot version, your previous deck migrates automatically on first load.
+- GitHub's API rate limit is 5,000 requests/hour for authenticated users, far more than this editor will ever use.
 
 ## Hosting it yourself
 
@@ -106,7 +95,7 @@ python3 -m http.server 8000
 
 Slide content is arbitrary HTML — including `<script>` and `<iframe>` because that's what reveal supports.
 
-- **Preview iframe.** The preview iframe carries no `sandbox` attribute. We tried — `allow-scripts allow-same-origin` got close, but Chrome's built-in PDF viewer refuses to render inside any sandboxed iframe on production (works on `localhost`, fails on real domains), and PDF iframe backgrounds are a feature we wanted. Slide scripts in the preview therefore run at the editor's full origin: a `<script>` in an imported deck can reach `window.parent`, read your IndexedDB, navigate the top window, etc. On a same-origin host the sandbox wouldn't have added meaningful protection here anyway.
+- **Preview iframe.** The preview iframe carries no `sandbox` attribute. I tried — `allow-scripts allow-same-origin` got close, but Chrome's built-in PDF viewer refuses to render inside any sandboxed iframe on production (works on `localhost`, fails on real domains), and PDF iframe backgrounds are a feature I wanted. Slide scripts in the preview therefore run at the editor's full origin: a `<script>` in an imported deck can reach `window.parent`, read your IndexedDB, navigate the top window, etc. On a same-origin host the sandbox wouldn't have added meaningful protection here anyway.
 - **Two-CSP design.** The editor itself runs under a strict CSP (its own origin, jsdelivr, Google Fonts; no inline scripts). The preview lives in a separate `preview.html` page that's loaded into the iframe and gets the deck data via `postMessage` — so its more permissive CSP (needed for arbitrary slide HTML) is isolated from the editor's at the CSP level. The same CSP is enforced via `.htaccess` on Apache hosts and a `<meta>` tag on static hosts. JSZip is pinned with a subresource-integrity hash.
 
 Practical upshot: **only import project files from sources you trust.** Imported HTML is rendered with `innerHTML`, and an `<img onerror="...">` inside an imported deck will fire when you preview it. Because the preview iframe runs at the editor's origin, that script can read your entire project library and navigate the editor anywhere. If that's a concern for you, host `preview.html` on a separate subdomain — then it's a genuinely different origin and slide scripts can't reach the editor.
