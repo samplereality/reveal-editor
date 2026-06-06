@@ -8,15 +8,15 @@ A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentatio
 
 ## What it does
 
-- **Visual slide editing**
+- **Visual slide editing.**
 - **Live theme preview.**
-- **Reveal.js formatting tools*** like `r-fit-text`, `r-stretch`, and `fragments`
+- **Reveal.js formatting tools** like `r-fit-text`, `r-stretch`, and `fragments`.
 - **Slide Backgrounds.** Per-slide color, image, video, or iframe backgrounds. Embed entire webpages with just a URL.
 - **Vertical sub-slides.** Check "Vertical sub-slide" to nest under the previous one; reveal will lay them out as a vertical group.
 - **Speaker notes side panel.** Opens to the right of the slide so you can see the slide and notes at the same time. Notes also appear in the deck's reveal speaker view (press `S` during a preview).
 - **Reveal.js settings, per deck.** Control [reveal.js config options](https://revealjs.com/config/). Settings are stored on the project, travel with `.json` export/import, and apply to the live preview, the standalone HTML export, and the PDF export.
 - **Multiple projects** with a Projects modal — open, duplicate, rename, delete, or export any of them.
-- **Import / Export.** Import from .json or .md. Export formats include .json, .html, .md, and .pdf
+- **Import/Export.** Import from `.json` or `.md`. Export formats include `.json`, `.html`, `.md`, and `.pdf`.
 - **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage. Small icons and SVGs are left untouched.
 
 ## How it stores your work
