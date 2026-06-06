@@ -4,7 +4,7 @@ A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentatio
 
 **Live demo:** `https://slides.samplereality.com`
 
-[Screenshot of the editor](reveal-editor.jpg)
+![Screenshot of the editor](reveal-editor.jpg)
 
 ## What it does
 
