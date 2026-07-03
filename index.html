@@ -179,6 +179,9 @@
     <strong id="preview-title">Preview</strong>
     <button type="button" id="preview-close">Close</button>
   </div>
+  <!-- Deliberately NOT sandboxed — Chrome's PDF viewer refuses to render
+       PDF iframe backgrounds inside a sandboxed iframe on production hosts.
+       See "Security notes" in the README. -->
   <iframe id="preview-frame" title="Preview" allowfullscreen></iframe>
 </div>
 

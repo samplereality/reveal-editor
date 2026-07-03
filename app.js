@@ -13,6 +13,15 @@
 
   const uid = () => 'id-' + Math.random().toString(36).slice(2, 10);
 
+  // Parse slide HTML for inspection/rewriting WITHOUT putting it in the live
+  // document. DOMParser documents are inert: scripts never run, images are
+  // not fetched, and inline event handlers (e.g. <img onerror=…>) never fire.
+  // Always use this — never `div.innerHTML = …` — when the HTML may come from
+  // an imported file or the sync gist. Returns the parsed <body>.
+  function parseHtml(html) {
+    return new DOMParser().parseFromString(html || '', 'text/html').body;
+  }
+
   const els = {
     deckTitle: $('#deck-title'),
     themeSelect: $('#theme-select'),
@@ -180,6 +189,7 @@
   let db = null;
   let dbReady = null;       // promise resolved once db is open (or null if it failed)
   const dirtyProjects = new Set();   // ids of projects that need flushing
+  const pushDirty = new Set();       // ids edited locally since the last successful gist push
   let metaDirty = false;
 
   function openDb() {
@@ -309,10 +319,32 @@
     else library.deletedIds.push({ id, deletedAt: now });
   }
 
-  // Mark a project (or the current one) for the next flush.
+  // Re-importing a project that was deleted earlier must lift its tombstone,
+  // or the next sync pull would treat the import as already-deleted and
+  // remove it again.
+  function clearTombstone(id) {
+    ensureDeletedIds();
+    library.deletedIds = library.deletedIds.filter(t => t.id !== id);
+  }
+
+  // Mark a project (or the current one) for the next flush. This is
+  // persistence-only: it does NOT stamp modifiedAt or queue a gist upload,
+  // so sync-pulled projects can be written to IDB without looking "edited".
   function markDirty(projectId) {
     dirtyProjects.add(projectId || (state && state.id));
     metaDirty = true;
+  }
+
+  // Mark a project as edited by the user: stamp modifiedAt (the value the
+  // cross-machine last-write-wins merge compares) and queue it for the next
+  // gist push, in addition to the local flush.
+  function markEdited(projectId) {
+    const id = projectId || (state && state.id);
+    if (!id) return;
+    const p = library.projects.find(x => x.id === id);
+    if (p) p.modifiedAt = Date.now();
+    pushDirty.add(id);
+    markDirty(id);
   }
 
   // Flush whatever's dirty to IndexedDB. Called by scheduleSave / saveProject.
@@ -329,7 +361,6 @@
       for (const id of ids) {
         const p = library.projects.find(x => x.id === id);
         if (!p) continue;
-        p.modifiedAt = Date.now();
         await idbPut(STORE_PROJECTS, p);
       }
       if (wasMetaDirty) {
@@ -361,7 +392,7 @@
 
   function scheduleSave() {
     setStatus('Saving…', false);
-    if (state) markDirty(state.id);
+    if (state) markEdited(state.id);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; flushDirty(); }, 400);
     schedulePush();
@@ -410,22 +441,45 @@
 
       li.addEventListener('click', () => selectSlide(slide.id));
 
+      // Keyboard access: slides are focusable; Enter selects, Shift+F10 or
+      // the ContextMenu key opens the same menu right-click does.
+      li.tabIndex = 0;
+      li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          selectSlide(slide.id);
+        } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+          e.preventDefault();
+          const r = li.getBoundingClientRect();
+          showSlideContextMenu(slide.id, r.left + r.width / 2, r.top + r.height / 2);
+        }
+      });
+
       li.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/x-slide-id', slide.id);
         e.dataTransfer.effectAllowed = 'move';
       });
+      // Dropping on the upper half of a slide inserts before it; the lower
+      // half inserts after. Without the "after" case the last position in
+      // the deck is unreachable by drag-and-drop.
+      const dropAfter = (e) => {
+        const rect = li.getBoundingClientRect();
+        return e.clientY > rect.top + rect.height / 2;
+      };
       li.addEventListener('dragover', (e) => {
         if (e.dataTransfer.types.includes('text/x-slide-id')) {
           e.preventDefault();
-          li.classList.add('drag-over');
+          const after = dropAfter(e);
+          li.classList.toggle('drag-over', !after);
+          li.classList.toggle('drag-over-after', after);
         }
       });
-      li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+      li.addEventListener('dragleave', () => li.classList.remove('drag-over', 'drag-over-after'));
       li.addEventListener('drop', (e) => {
         e.preventDefault();
-        li.classList.remove('drag-over');
+        li.classList.remove('drag-over', 'drag-over-after');
         const fromId = e.dataTransfer.getData('text/x-slide-id');
-        if (fromId && fromId !== slide.id) moveSlide(fromId, slide.id);
+        if (fromId && fromId !== slide.id) moveSlide(fromId, slide.id, dropAfter(e));
       });
 
       li.addEventListener('contextmenu', (e) => {
@@ -488,10 +542,18 @@
     if (top + rect.height > window.innerHeight) top = Math.max(4, window.innerHeight - rect.height - 4);
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
+    const first = menu.querySelector('button:not(:disabled)');
+    if (first) first.focus();
   }
 
   function hideSlideContextMenu() {
-    if (!els.slideMenu.hidden) els.slideMenu.hidden = true;
+    if (els.slideMenu.hidden) return;
+    const hadFocus = els.slideMenu.contains(document.activeElement);
+    els.slideMenu.hidden = true;
+    if (hadFocus) {
+      const li = els.slideList.querySelector('li.active');
+      if (li) li.focus();
+    }
   }
 
   function insertSlideAt(idx, vertical = false) {
@@ -555,8 +617,7 @@
   // Returns { icon, text } so renderers can put a Phosphor <i> next to the
   // text instead of mixing emoji into the textContent.
   function slideLabel(slide) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = slide.content;
+    const tmp = parseHtml(slide.content);
     const txt = (tmp.textContent || '').trim().replace(/\s+/g, ' ');
     if (txt) return { icon: null, text: txt.length > 48 ? txt.slice(0, 48) + '…' : txt };
     const media = tmp.querySelector('img, video, iframe');
@@ -690,36 +751,58 @@
   // metadata changes; text typing inside slides falls back to the browser's
   // native contenteditable undo while focus is in the editor.
   const HISTORY_LIMIT = 50;
+  // Slides with pasted photos carry multi-MB data URIs; 50 deep copies of
+  // such a deck would pin an enormous amount of memory. Cap the undo stack
+  // by approximate content size as well as entry count.
+  const HISTORY_BYTE_LIMIT = 20 * 1024 * 1024;
   const history = { undo: [], redo: [] };
   let textEditField = null;  // tracks active text-input session so we snapshot once per field-focus
 
   function snapshotProject() {
-    return {
+    const snap = {
       title: state.title,
+      name: state.name,
       theme: state.theme,
       currentId: state.currentId,
       slides: JSON.parse(JSON.stringify(state.slides)),
+      config: { ...(state.config || {}) },
     };
+    snap.bytes = snap.slides.reduce(
+      (n, s) => n + (s.content ? s.content.length : 0) + (s.notes ? s.notes.length : 0), 0);
+    return snap;
   }
 
   function restoreProject(snap) {
     state.title = snap.title;
+    if (snap.name !== undefined) state.name = snap.name;
     state.theme = snap.theme;
     state.slides = snap.slides;
     state.currentId = snap.currentId;
+    if (snap.config) state.config = { ...snap.config };
     if (!state.slides.some(s => s.id === state.currentId)) {
       state.currentId = state.slides[0] && state.slides[0].id;
     }
     renderAll();
+    // Refresh any open panels that display restored fields.
+    if (!els.settingsModal.hidden) renderSettingsForm();
+    if (!els.projectsModal.hidden) renderProjectsList();
     scheduleSave();
   }
 
   function recordHistory() {
     captureCurrentContent();
     history.undo.push(snapshotProject());
-    if (history.undo.length > HISTORY_LIMIT) history.undo.shift();
+    trimHistory();
     history.redo.length = 0;
     refreshUndoButtons();
+  }
+
+  function trimHistory() {
+    const total = () => history.undo.reduce((n, s) => n + (s.bytes || 0), 0);
+    while (history.undo.length > 1
+        && (history.undo.length > HISTORY_LIMIT || total() > HISTORY_BYTE_LIMIT)) {
+      history.undo.shift();
+    }
   }
 
   function snapshotForTextField(name) {
@@ -894,12 +977,14 @@
     scheduleSave();
   }
 
-  function moveSlide(fromId, beforeId) {
-    recordHistory();
+  function moveSlide(fromId, targetId, after = false) {
     const fromIdx = state.slides.findIndex(s => s.id === fromId);
     if (fromIdx < 0) return;
+    recordHistory();
     const [moved] = state.slides.splice(fromIdx, 1);
-    const toIdx = state.slides.findIndex(s => s.id === beforeId);
+    let toIdx = state.slides.findIndex(s => s.id === targetId);
+    if (toIdx < 0) toIdx = state.slides.length;
+    else if (after) toIdx += 1;
     state.slides.splice(toIdx, 0, moved);
     renderSidebar();
     scheduleSave();
@@ -933,6 +1018,7 @@
   function wrapSelection(tag, className) {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    recordHistory();
     const range = sel.getRangeAt(0);
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -972,6 +1058,7 @@
   function handleToolbarAction(action) {
     switch (action) {
       case 'blockquote':
+        recordHistory();
         execCmd('formatBlock', 'blockquote');
         break;
       case 'code-inline':
@@ -980,12 +1067,16 @@
       case 'code-block': {
         const sel = window.getSelection();
         const text = sel && !sel.isCollapsed ? sel.toString() : 'code here';
+        recordHistory();
         insertHTMLAtCursor(`<pre><code>${escapeHtml(text)}</code></pre><p></p>`);
         break;
       }
       case 'link': {
         const url = prompt('Link URL:', 'https://');
-        if (url) execCmd('createLink', url);
+        if (url) {
+          recordHistory();
+          execCmd('createLink', url);
+        }
         break;
       }
       case 'image':
@@ -1005,6 +1096,7 @@
         break;
       }
       case 'hr':
+        recordHistory();
         insertHTMLAtCursor('<hr><p></p>');
         break;
       case 'fragment':
@@ -1130,6 +1222,7 @@
       setStatus(`Place the cursor in a block first to apply ${cls}`, false);
       return;
     }
+    recordHistory();
     block.classList.toggle(cls);
     // Clear inline sizes that applySlideEffects may have set when the class
     // is being removed, otherwise the block keeps its fit/stretch geometry.
@@ -1209,6 +1302,7 @@
     // 1. Cursor is already inside a fragment → remove it.
     //    (Inline span: unwrap. Block-level: strip the classes.)
     if (activeFrag) {
+      recordHistory();
       if (activeFrag.tagName.toLowerCase() === 'span') {
         const parent = activeFrag.parentNode;
         while (activeFrag.firstChild) parent.insertBefore(activeFrag.firstChild, activeFrag);
@@ -1228,6 +1322,7 @@
       && !rangeCoversBlock(sel.getRangeAt(0), block);
 
     if (hasInlineSelection) {
+      recordHistory();
       const span = document.createElement('span');
       span.className = 'fragment';
       if (type) span.classList.add(type);
@@ -1253,6 +1348,7 @@
       setStatus('Place the cursor in a block to fragment it', false);
       return;
     }
+    recordHistory();
     block.classList.add('fragment');
     if (type) block.classList.add(type);
     onEditorInput();
@@ -1272,15 +1368,26 @@
     }[c]));
   }
 
+  // The sidebar label re-parses the slide's full HTML — noticeably heavy on
+  // slides holding multi-MB image data URIs. Debounce it; the state capture
+  // and save scheduling stay immediate.
+  let labelTimer = null;
+  function scheduleLabelUpdate() {
+    clearTimeout(labelTimer);
+    labelTimer = setTimeout(() => {
+      labelTimer = null;
+      const li = els.slideList.querySelector(`li[data-id="${state.currentId}"] .label`);
+      if (li) renderLabelInto(li, slideLabel(currentSlide()));
+    }, 150);
+  }
+
   function onEditorInput() {
     captureCurrentContent();
     if (!sourceMode) {
       decorateFragments();
       applySlideEffects();
     }
-    // Update sidebar label
-    const li = els.slideList.querySelector(`li[data-id="${state.currentId}"] .label`);
-    if (li) renderLabelInto(li, slideLabel(currentSlide()));
+    scheduleLabelUpdate();
     scheduleSave();
   }
 
@@ -1380,6 +1487,9 @@
     const tag = linkHref
       ? `<a href="${escapeAttr(linkHref)}" target="_blank" rel="noopener noreferrer" class="linked-image">${imgTag}</a>`
       : imgTag;
+    // Snapshot here (not at the toolbar click) so paste/drop insertions are
+    // undoable too, and a cancelled file picker leaves no no-op entry.
+    recordHistory();
     if (sourceMode) {
       const ta = els.source;
       const pos = ta.selectionStart;
@@ -1575,6 +1685,7 @@ ${sections}
       ? `Preview — from slide ${slideNumber(state.slides.findIndex(s => s.id === state.currentId))}`
       : 'Preview';
     els.previewModal.hidden = false;
+    modalReturnFocus = document.activeElement;   // focus lands in the iframe; remember where to return
     // Force a fresh load so reveal.js re-initializes cleanly each time.
     els.previewFrame.addEventListener('load', () => {
       try {
@@ -1588,6 +1699,7 @@ ${sections}
   function closePreview() {
     els.previewModal.hidden = true;
     els.previewFrame.removeAttribute('src');
+    restoreModalFocus();
   }
 
   function exportProjectAsHtml(id) {
@@ -1637,8 +1749,7 @@ ${sections}
   function extractDataUriAssets(slide, assetMap, counter) {
     const next = { ...slide };
     if (slide.content) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = slide.content;
+      const wrap = parseHtml(slide.content);
       wrap.querySelectorAll('img[src^="data:"]').forEach(img => {
         const a = ensureAsset(img.getAttribute('src') || '', assetMap, counter);
         if (a) img.setAttribute('src', a.path);
@@ -1795,7 +1906,7 @@ ${sections}
     library.projects.push(p);
     state = p;
     library.currentProjectId = p.id;
-    markDirty(p.id);
+    markEdited(p.id);
     metaDirty = true;
     clearHistory();
     renderAll();
@@ -1822,7 +1933,7 @@ ${sections}
     copy.slides.forEach(s => { s.id = uid(); });
     copy.currentId = copy.slides[0].id;
     library.projects.push(copy);
-    markDirty(copy.id);
+    markEdited(copy.id);
     flushDirty();
     renderProjectsList();
   }
@@ -1840,7 +1951,7 @@ ${sections}
       library.projects.push(fresh);
       state = fresh;
       library.currentProjectId = fresh.id;
-      markDirty(fresh.id);
+      markEdited(fresh.id);
       clearHistory();
       renderAll();
     } else if (state.id === id) {
@@ -1860,11 +1971,10 @@ ${sections}
     const trimmed = (newName || '').trim() || 'Untitled presentation';
     p.name = trimmed;
     p.title = trimmed;
-    p.modifiedAt = Date.now();
     if (state.id === id) {
       els.deckTitle.value = trimmed;
     }
-    markDirty(id);
+    markEdited(id);
     flushDirty();
     renderProjectsList();
   }
@@ -1962,7 +2072,8 @@ ${sections}
     const p = normalizeProject({ ...data, id }, file.name.replace(/\.json$/i, ''));
     if (!p) throw new Error('Not a valid project file');
     library.projects.push(p);
-    markDirty(p.id);
+    clearTombstone(p.id);
+    markEdited(p.id);
   }
 
   async function importMarkdownFile(file) {
@@ -1986,7 +2097,8 @@ ${sections}
     }, name);
     if (!p) throw new Error('Failed to build project from markdown');
     library.projects.push(p);
-    markDirty(p.id);
+    clearTombstone(p.id);
+    markEdited(p.id);
   }
 
   // -------- Markdown deck parsing --------
@@ -2083,7 +2195,8 @@ ${sections}
         const p = normalizeProject({ ...data, id }, entry.name.replace(/\.json$/i, ''));
         if (p) {
           library.projects.push(p);
-          markDirty(p.id);
+          clearTombstone(p.id);
+          markEdited(p.id);
           count++;
         }
       } catch {
@@ -2133,7 +2246,8 @@ ${sections}
         }, name);
         if (p) {
           library.projects.push(p);
-          markDirty(p.id);
+          clearTombstone(p.id);
+          markEdited(p.id);
           count++;
         }
       } catch {
@@ -2143,25 +2257,36 @@ ${sections}
     return count;
   }
 
+  // Look up a markdown-referenced asset path in the zip. Falls back to a
+  // suffix match so a zip made from a containing folder (deck/assets/x.png)
+  // still resolves references written as assets/x.png.
+  function lookupAsset(assetMap, src) {
+    if (assetMap.has(src)) return assetMap.get(src);
+    for (const [name, data] of assetMap) {
+      if (name.endsWith('/' + src)) return data;
+    }
+    return null;
+  }
+
   function reinlineSlideAssets(slide, assetMap) {
     if (slide.content) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = slide.content;
+      const wrap = parseHtml(slide.content);
       let changed = false;
       wrap.querySelectorAll('img[src]').forEach(img => {
         const src = img.getAttribute('src') || '';
         if (/^(https?:|data:|blob:|\/)/i.test(src)) return;
-        if (assetMap.has(src)) {
-          img.setAttribute('src', assetMap.get(src));
+        const data = lookupAsset(assetMap, src);
+        if (data) {
+          img.setAttribute('src', data);
           changed = true;
         }
       });
       if (changed) slide.content = wrap.innerHTML;
     }
     if (slide.background && slide.background.value
-        && !/^(https?:|data:|blob:|\/)/i.test(slide.background.value)
-        && assetMap.has(slide.background.value)) {
-      slide.background = { ...slide.background, value: assetMap.get(slide.background.value) };
+        && !/^(https?:|data:|blob:|\/)/i.test(slide.background.value)) {
+      const data = lookupAsset(assetMap, slide.background.value);
+      if (data) slide.background = { ...slide.background, value: data };
     }
   }
 
@@ -2224,14 +2349,31 @@ ${sections}
     return cfg;
   }
 
+  // -------- Modal focus management --------
+  // Move focus into a modal when it opens and back to where the user was
+  // when it closes, so keyboard/screen-reader users aren't left focused on
+  // an element hidden behind the overlay.
+  let modalReturnFocus = null;
+  function focusModal(modal) {
+    modalReturnFocus = document.activeElement;
+    const target = modal.querySelector('button, input, select, textarea, a[href]');
+    if (target) target.focus();
+  }
+  function restoreModalFocus() {
+    if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
+    modalReturnFocus = null;
+  }
+
   function openSettingsModal() {
     renderSettingsForm();
     els.settingsModal.hidden = false;
+    focusModal(els.settingsModal);
   }
 
   function closeSettingsModal() {
     els.settingsModal.hidden = true;
     endTextEditSession();
+    restoreModalFocus();
   }
 
   function renderSettingsForm() {
@@ -2321,10 +2463,12 @@ ${sections}
     renderProjectsList();
     refreshRemoteProjectsList();
     els.projectsModal.hidden = false;
+    focusModal(els.projectsModal);
   }
 
   function closeProjectsModal() {
     els.projectsModal.hidden = true;
+    restoreModalFocus();
   }
 
   // -------- Gist contents in Projects modal --------
@@ -2356,6 +2500,7 @@ ${sections}
           title: parsed.title || parsed.name || '(untitled)',
           modifiedAt: parsed.modifiedAt || 0,
           slideCount: Array.isArray(parsed.slides) ? parsed.slides.length : 0,
+          parsed,   // kept so Pull can import without refetching the gist
         });
       }
       items.sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
@@ -2413,20 +2558,52 @@ ${sections}
       if (local) {
         tag.classList.add('match');
         tag.textContent = 'synced';
+        tag.title = 'This project exists in this browser and on the gist.';
         matches++;
       } else if (sameNameDifferentId) {
         tag.classList.add('duplicate');
         tag.textContent = 'duplicate id';
+        tag.title = 'A local project has this name under a different id — usually an older '
+          + 'copy from another machine or a re-import. Pull it in to compare and merge by '
+          + 'hand, or delete it from the gist if it’s stale.';
         dupes++;
       } else {
         tag.classList.add('orphan');
         tag.textContent = 'remote only';
+        tag.title = 'On the gist but not in this browser — usually a project deleted here '
+          + 'that another machine still pushes, or one this browser skipped. Pull it in '
+          + 'to keep it, or delete it from the gist.';
         orphans++;
       }
       name.appendChild(tag);
 
       li.appendChild(name);
       li.appendChild(meta);
+
+      // Non-synced entries get remediation actions; synced ones are managed
+      // through the local list above.
+      if (!local) {
+        const actions = document.createElement('div');
+        actions.className = 'proj-actions';
+
+        const pullBtn = document.createElement('button');
+        pullBtn.type = 'button';
+        pullBtn.textContent = 'Pull to this browser';
+        pullBtn.title = 'Import this copy from the gist into this browser';
+        pullBtn.addEventListener('click', () => pullRemoteProject(r));
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'danger';
+        delBtn.textContent = 'Delete from gist';
+        delBtn.title = 'Remove this file from the gist; synced browsers that still have '
+          + 'the project will delete it on their next sync';
+        delBtn.addEventListener('click', () => deleteRemoteGistFile(r));
+
+        actions.appendChild(pullBtn);
+        actions.appendChild(delBtn);
+        li.appendChild(actions);
+      }
       list.appendChild(li);
     }
     const parts = [`${items.length} project${items.length === 1 ? '' : 's'} on gist`];
@@ -2434,6 +2611,63 @@ ${sections}
     if (dupes) parts.push(`${dupes} same-name but different id`);
     if (orphans) parts.push(`${orphans} remote-only`);
     els.projectsRemoteStatus.textContent = parts.join(' · ');
+  }
+
+  // Import a remote-only / duplicate-id gist project into this browser.
+  // markEdited stamps a fresh modifiedAt on purpose: if this project was
+  // deleted here earlier, its tombstone still exists (and tombstone merges
+  // are a union, so clearing it locally can't fully retract it) — the pulled
+  // copy must be NEWER than the tombstone or the next sync would delete it
+  // again.
+  function pullRemoteProject(item) {
+    if (!item.parsed) return;
+    const collides = library.projects.some(p => p.id === item.id);
+    const id = collides ? uid() : item.id;
+    const p = normalizeProject({ ...item.parsed, id }, item.name);
+    if (!p) {
+      alert('Could not read this project from the gist.');
+      return;
+    }
+    // Two identically named projects are hard to tell apart in the list —
+    // suffix the pulled one when a same-name local project already exists.
+    const nameKey = (p.name || p.title || '').trim().toLowerCase();
+    if (library.projects.some(lp => (lp.name || lp.title || '').trim().toLowerCase() === nameKey)) {
+      p.name = p.title = (p.name || p.title || 'Untitled') + ' (gist copy)';
+    }
+    library.projects.push(p);
+    clearTombstone(p.id);
+    markEdited(p.id);
+    flushDirty();
+    schedulePush();   // propagate the fresh modifiedAt so other machines keep it too
+    renderProjectsList();
+    refreshRemoteProjectsList();
+    setStatus(`Pulled "${p.name}" from gist`, true);
+  }
+
+  // Remove a remote-only / duplicate-id file from the gist. Records a
+  // tombstone first — without one, any synced browser that still holds the
+  // project alive would simply push the file right back.
+  async function deleteRemoteGistFile(item) {
+    if (!confirm(`Delete "${item.name}" from the gist?\n\nAny synced browser that still has this project will delete it on its next sync. This can't be undone.`)) return;
+    recordTombstone(item.id);
+    metaDirty = true;
+    els.projectsRemoteStatus.textContent = 'Deleting from gist…';
+    try {
+      // Re-check the gist before deleting: the panel can be stale, and the
+      // file may already be gone (tombstone cleanup in syncPush, or another
+      // machine). GitHub rejects a PATCH that nulls a nonexistent file with
+      // 422 Validation Failed, so only null it if it's still there — and
+      // publish the updated tombstone list either way.
+      const remote = await gistGet(sync.gistId);
+      const files = { [SYNC_LIBRARY_FILE]: buildLibraryGistFile() };
+      if (remote.files && remote.files[item.filename]) files[item.filename] = null;
+      await gistPatch(sync.gistId, files);
+      setStatus(`Deleted "${item.name}" from gist`, true);
+    } catch (e) {
+      alert('Delete failed: ' + (e.message || e));
+    }
+    flushDirty();
+    refreshRemoteProjectsList();
   }
 
   function renderProjectsList() {
@@ -2722,7 +2956,17 @@ ${sections}
     if (!r.ok) {
       const body = await r.text().catch(() => '');
       const msg = (() => {
-        try { return JSON.parse(body).message; } catch { return body; }
+        try {
+          const data = JSON.parse(body);
+          // 422s carry the useful part in `errors`, not `message` — e.g.
+          // "Validation Failed" alone says nothing about which field/file.
+          const detail = Array.isArray(data.errors) && data.errors.length
+            ? ' — ' + data.errors.map(er =>
+                er.message || [er.resource, er.field, er.code].filter(Boolean).join(' ')
+              ).join('; ')
+            : '';
+          return (data.message || '') + detail;
+        } catch { return body; }
       })();
       throw new Error(`GitHub API ${r.status}: ${msg || r.statusText}`);
     }
@@ -2817,95 +3061,55 @@ ${sections}
     return Array.from(merged.values());
   }
 
-  // Pull the gist and merge it with the local library.
-  async function syncPull() {
-    const remote = await gistGetResolved(sync.gistId);
-    const files = remote.files || {};
-    const libFile = files[SYNC_LIBRARY_FILE];
-    const remoteLib = parseLibraryGist(libFile);
-    ensureDeletedIds();
-
-    const remoteProjects = [];
-    for (const name of Object.keys(files)) {
-      if (name === SYNC_LIBRARY_FILE) continue;
-      const idFromName = name.replace(/\.json$/i, '');
-      const p = parseProjectFromGist(files[name], idFromName);
-      if (p) remoteProjects.push(p);
-    }
-
-    const tombstones = mergeTombstones(library.deletedIds, remoteLib.deletedIds);
-    const tombMap = new Map(tombstones.map(t => [t.id, t.deletedAt || 0]));
-
-    const localById = new Map(library.projects.map(p => [p.id, p]));
-
-    // Remove local projects whose remote tombstone is newer than local modifiedAt.
-    for (const p of [...library.projects]) {
-      const ts = tombMap.get(p.id);
-      if (ts && ts > (p.modifiedAt || 0)) {
-        const idx = library.projects.indexOf(p);
-        if (idx >= 0) library.projects.splice(idx, 1);
-        deleteProjectRecord(p.id);
-        localById.delete(p.id);
-      }
-    }
-
-    // Merge each remote project into local.
-    for (const rp of remoteProjects) {
-      const ts = tombMap.get(rp.id);
-      if (ts && ts > (rp.modifiedAt || 0)) continue; // tombstoned newer than remote — skip
-      const lp = localById.get(rp.id);
-      if (!lp) {
-        library.projects.push(rp);
-        markDirty(rp.id);
-      } else if ((rp.modifiedAt || 0) > (lp.modifiedAt || 0)) {
-        // Replace local fields in place (state may still reference lp).
-        Object.assign(lp, rp);
-        if (state && state.id === lp.id) renderAll();
-      }
-    }
-
-    // Make sure we still have a current project after deletions.
-    if (library.projects.length === 0) {
-      const fresh = blankProject();
-      library.projects.push(fresh);
-      state = fresh;
-      library.currentProjectId = fresh.id;
-      markDirty(fresh.id);
-      renderAll();
-    } else if (!library.projects.some(p => p.id === library.currentProjectId)) {
-      state = library.projects[0];
-      library.currentProjectId = state.id;
-      renderAll();
-    } else if (state) {
-      // Refresh sidebar in case projects were added/removed.
-      renderSidebar();
-    }
-    library.deletedIds = tombstones;
-    metaDirty = true;
-    await flushDirty();
-  }
-
-  // Push the local library to the gist, including null entries for files that
-  // should be removed on the remote (tombstoned or renamed).
+  // Push local changes to the gist. Only uploads projects that were edited
+  // since the last successful push (pushDirty) or that don't exist on the
+  // remote yet — re-uploading the entire library on every keystroke-debounced
+  // push is slow and wasteful once projects contain embedded images.
+  //
+  // Deletions are driven strictly by tombstones. Deleting any remote file
+  // that merely isn't in the local library is dangerous: if a large project
+  // failed to download or parse during the pull (network blip, >1 MB gist
+  // truncation), it never joins the local library and would be wiped from
+  // the remote by the very next push.
   async function syncPush(remoteSnapshot) {
-    const files = buildProjectGistFiles();
+    const pushing = new Set(pushDirty);
+    pushDirty.clear();
+
+    const remoteFiles = (remoteSnapshot && remoteSnapshot.files) || null;
+    const files = {};
+    for (const p of library.projects) {
+      const name = `${p.id}.json`;
+      const missingOnRemote = !remoteFiles || !remoteFiles[name];
+      if (pushing.has(p.id) || missingOnRemote) {
+        files[name] = { content: JSON.stringify(serializeProject(p), null, 2) };
+      }
+    }
     files[SYNC_LIBRARY_FILE] = buildLibraryGistFile();
 
-    // Mark files to delete on remote: tombstoned IDs that still exist as files.
-    if (remoteSnapshot && remoteSnapshot.files) {
-      const localIds = new Set(library.projects.map(p => p.id));
-      for (const name of Object.keys(remoteSnapshot.files)) {
+    // A tombstoned id can still be alive locally: if the project was edited
+    // on another machine after the deletion, the pull resurrects it. Only
+    // delete remote files whose id is tombstoned AND not in the local library.
+    const tombIds = new Set((library.deletedIds || []).map(t => t.id));
+    const localIds = new Set(library.projects.map(p => p.id));
+    if (remoteFiles) {
+      for (const name of Object.keys(remoteFiles)) {
         if (name === SYNC_LIBRARY_FILE) continue;
         const id = name.replace(/\.json$/i, '');
-        if (!localIds.has(id)) files[name] = null;
+        if (tombIds.has(id) && !localIds.has(id) && !files[name]) files[name] = null;
       }
     } else {
-      // No snapshot — best effort: delete tombstoned file names.
-      for (const t of library.deletedIds || []) {
-        files[`${t.id}.json`] = null;
+      for (const id of tombIds) {
+        if (!localIds.has(id)) files[`${id}.json`] = null;
       }
     }
-    await gistPatch(sync.gistId, files);
+
+    try {
+      await gistPatch(sync.gistId, files);
+    } catch (e) {
+      // Re-queue what we tried to push so the next attempt retries it.
+      pushing.forEach(id => pushDirty.add(id));
+      throw e;
+    }
   }
 
   async function syncNow({ silent = false } = {}) {
@@ -2928,11 +3132,18 @@ ${sections}
         // reverted mid-stream. Manual "Sync now" still replaces everything.
         const remoteBefore = await gistGetResolved(sync.gistId);
         applyPulledGist(remoteBefore, { protectOpen: silent });
+        // Persist pulled/merged projects to IndexedDB now — otherwise a
+        // pull-then-close session leaves the local store stale.
+        await flushDirty();
         await syncPush(remoteBefore);
         sync.lastSync = Date.now();
         sync.status = 'idle';
         sync.error = null;
         persistSyncConfig();
+        // A push may have changed what's on the gist (tombstone cleanup,
+        // uploads) — keep the Projects modal's remote panel from going
+        // stale while it's open, or its actions can target missing files.
+        if (!els.projectsModal.hidden) refreshRemoteProjectsList();
       } catch (e) {
         sync.status = 'error';
         sync.error = e.message || String(e);
@@ -2989,6 +3200,7 @@ ${sections}
       } else if ((rp.modifiedAt || 0) > (lp.modifiedAt || 0)) {
         if (protectOpen && lp.id === openId) continue;
         Object.assign(lp, rp);
+        markDirty(lp.id);   // persist the merged version — IDB still has the old one
         if (state && state.id === lp.id) renderAll();
       }
     }
@@ -2997,7 +3209,7 @@ ${sections}
       library.projects.push(fresh);
       state = fresh;
       library.currentProjectId = fresh.id;
-      markDirty(fresh.id);
+      markEdited(fresh.id);
       renderAll();
     } else if (!library.projects.some(p => p.id === library.currentProjectId)) {
       state = library.projects[0];
@@ -3027,6 +3239,7 @@ ${sections}
       for (const name of Object.keys(remote.files || {})) files[name] = null;
       Object.assign(files, buildProjectGistFiles(), { [SYNC_LIBRARY_FILE]: buildLibraryGistFile() });
       await gistPatch(sync.gistId, files);
+      pushDirty.clear();   // everything was just uploaded
       sync.lastSync = Date.now();
       sync.status = 'idle';
       sync.error = null;
@@ -3055,10 +3268,12 @@ ${sections}
   function openSyncModal() {
     renderSyncModal();
     els.syncModal.hidden = false;
+    focusModal(els.syncModal);
   }
 
   function closeSyncModal() {
     els.syncModal.hidden = true;
+    restoreModalFocus();
   }
 
   function renderSyncModal() {
@@ -3102,6 +3317,8 @@ ${sections}
           'Reveal Editor projects (sync)',
         );
         sync.gistId = created.id;
+        pushDirty.clear();   // everything was just uploaded
+
       }
       persistSyncConfig();
       sync.status = 'idle';
@@ -3181,10 +3398,13 @@ ${sections}
       const cmd = btn.dataset.cmd;
       const arg = btn.dataset.arg || null;
       const action = btn.dataset.action;
-      if (cmd || action) recordHistory();
       if (cmd) {
+        recordHistory();
         execCmd(cmd, arg);
       } else if (action) {
+        // Actions snapshot history themselves, once they know they'll
+        // actually change something — a cancelled Link/Image prompt must
+        // not leave a no-op undo entry behind.
         handleToolbarAction(action);
       }
     });
@@ -3194,7 +3414,7 @@ ${sections}
       sourceMode = !sourceMode;
       els.editor.hidden = sourceMode;
       els.source.hidden = !sourceMode;
-      els.toggleSource.style.background = sourceMode ? '#3a4663' : '';
+      els.toggleSource.classList.toggle('active', sourceMode);
       renderEditor();
     });
 
@@ -3264,10 +3484,14 @@ ${sections}
 
     // About modal
     if (els.aboutVersion) els.aboutVersion.textContent = APP_VERSION;
-    els.aboutButton.addEventListener('click', () => { els.aboutModal.hidden = false; });
-    els.aboutClose.addEventListener('click', () => { els.aboutModal.hidden = true; });
+    const closeAboutModal = () => { els.aboutModal.hidden = true; restoreModalFocus(); };
+    els.aboutButton.addEventListener('click', () => {
+      els.aboutModal.hidden = false;
+      focusModal(els.aboutModal);
+    });
+    els.aboutClose.addEventListener('click', closeAboutModal);
     els.aboutModal.addEventListener('click', (e) => {
-      if (e.target === els.aboutModal) els.aboutModal.hidden = true;
+      if (e.target === els.aboutModal) closeAboutModal();
     });
 
     // Settings modal
@@ -3349,9 +3573,22 @@ ${sections}
         else if (!els.projectsModal.hidden) closeProjectsModal();
         else if (!els.settingsModal.hidden) closeSettingsModal();
         else if (!els.syncModal.hidden) closeSyncModal();
-        else if (!els.aboutModal.hidden) els.aboutModal.hidden = true;
+        else if (!els.aboutModal.hidden) { els.aboutModal.hidden = true; restoreModalFocus(); }
         else if (isNotesPanelOpen()) closeNotesPanel();
       }
+    });
+
+    // Arrow-key navigation inside the slide context menu.
+    els.slideMenu.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const btns = Array.from(els.slideMenu.querySelectorAll('button:not(:disabled)'));
+      if (!btns.length) return;
+      const i = btns.indexOf(document.activeElement);
+      const next = e.key === 'ArrowDown'
+        ? (i + 1) % btns.length
+        : (i - 1 + btns.length) % btns.length;
+      btns[next].focus();
     });
 
     // Dismiss the slide context menu on outside click, scroll, or window blur.
@@ -3371,10 +3608,29 @@ ${sections}
       resizeTimer = setTimeout(applySlideEffects, 80);
     });
 
+    // Flush pending work when the tab is hidden — that's the last reliable
+    // moment before a close: beforeunload can't await the async IndexedDB
+    // write, and a hidden-but-alive tab still completes fetches, so the
+    // debounced gist push gets its chance to run instead of being dropped.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (saveTimer != null) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        captureCurrentContent();
+        saveProject();
+      }
+      if (sync.pushTimer) {
+        clearTimeout(sync.pushTimer);
+        sync.pushTimer = null;
+        syncNow({ silent: true });
+      }
+    });
+
     window.addEventListener('beforeunload', () => {
-      // Only flush if there's a pending debounced save. Saving unconditionally
-      // would overwrite localStorage with whatever's currently in memory even
-      // when the user hasn't actually edited anything.
+      // Backstop for the visibilitychange flush. Only flush if there's a
+      // pending debounced save — saving unconditionally would overwrite
+      // storage with whatever's in memory even when nothing was edited.
       if (saveTimer != null) {
         captureCurrentContent();
         saveProject();
@@ -3395,4 +3651,7 @@ ${sections}
     // Auto-pull on load so this browser starts with the latest remote state.
     syncNow({ silent: true });
   }
+  // The pill shows a relative time ("Synced 2 min ago") — re-render it
+  // periodically so it doesn't read "just now" forever.
+  setInterval(updateSyncPill, 30000);
 })();

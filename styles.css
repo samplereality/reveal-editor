@@ -171,6 +171,9 @@ body.notes-open .layout {
 .slide-list li.drag-over {
   border-top: 2px solid var(--accent);
 }
+.slide-list li.drag-over-after {
+  border-bottom: 2px solid var(--accent);
+}
 .slide-list li.vertical {
   margin-left: 18px;
 }
@@ -324,6 +327,12 @@ body.light .context-menu button.danger { color: #b91c1c; }
 .toolbar button {
   padding: 4px 8px;
   font-size: 12px;
+}
+/* Pressed-in state (e.g. source view toggled on) — theme-aware, unlike a
+   hardcoded background color. */
+.toolbar button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--input-bg));
 }
 .toolbar-select {
   padding: 3px 6px;

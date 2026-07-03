@@ -51,6 +51,14 @@ If you bounce between machines, the **Sync** pill in the top bar lets you mirror
 - A **Reset gist** button replaces remote state with this browser's state — useful if the gist gets into a weird mixed state.
 - A **Disconnect** button clears the token and gist ID from this browser. Your data stays where it is; the next browser/sync still works.
 
+**Untangling the "On the gist" list:** the Projects modal shows what's actually on the gist, with a tag per entry:
+
+- **synced** — exists here and on the gist. Nothing to do; manage it through the local list above.
+- **remote only** — on the gist but not in this browser, usually because you deleted it here and another machine still pushes it (or its tombstone predates these cleanups). **Pull to this browser** brings it back locally; **Delete from gist** removes the file *and* records a deletion tombstone, so browsers that still have the project will delete it on their next sync.
+- **duplicate id** — a local project has the same name under a different id: typically an older copy from before sync preserved ids, or a re-imported `.json`. Pull it in (it arrives suffixed "(gist copy)") to compare and merge by hand, or delete it from the gist if it's stale.
+
+Stale tombstoned files are also cleaned off the gist automatically on this browser's next push, so lingering *remote only* entries mostly resolve themselves; the buttons are for when you want to decide their fate right now.
+
 **Caveats:**
 
 - The gist PAT lives in `localStorage`. Any XSS on this site could exfiltrate it. The `gist` scope limits the damage — an attacker could only read/write your gists, not your repos or anything else.
@@ -98,7 +106,7 @@ Slide content is arbitrary HTML — including `<script>` and `<iframe>` because 
 - **Preview iframe.** The preview iframe carries no `sandbox` attribute. I tried — `allow-scripts allow-same-origin` got close, but Chrome's built-in PDF viewer refuses to render inside any sandboxed iframe on production (works on `localhost`, fails on real domains), and PDF iframe backgrounds are a feature I wanted. Slide scripts in the preview therefore run at the editor's full origin: a `<script>` in an imported deck can reach `window.parent`, read your IndexedDB, navigate the top window, etc. On a same-origin host the sandbox wouldn't have added meaningful protection here anyway.
 - **Two-CSP design.** The editor itself runs under a strict CSP (its own origin, jsdelivr, Google Fonts; no inline scripts). The preview lives in a separate `preview.html` page that's loaded into the iframe and gets the deck data via `postMessage` — so its more permissive CSP (needed for arbitrary slide HTML) is isolated from the editor's at the CSP level. The same CSP is enforced via `.htaccess` on Apache hosts and a `<meta>` tag on static hosts. JSZip is pinned with a subresource-integrity hash.
 
-Practical upshot: **only import project files from sources you trust.** Imported HTML is rendered with `innerHTML`, and an `<img onerror="...">` inside an imported deck will fire when you preview it. Because the preview iframe runs at the editor's origin, that script can read your entire project library and navigate the editor anywhere. If that's a concern for you, host `preview.html` on a separate subdomain — then it's a genuinely different origin and slide scripts can't reach the editor.
+Practical upshot: **only import project files from sources you trust.** Importing a deck is now inert — files are parsed with `DOMParser`, so nothing in them executes at import time — but scripts and `<img onerror="...">` handlers in an imported deck still run when you open it in the editor or preview it. Because the preview iframe runs at the editor's origin, that script can read your entire project library, **including the GitHub token in `localStorage` if you've set up gist sync**, and navigate the editor anywhere. If that's a concern for you, host `preview.html` on a separate subdomain — then it's a genuinely different origin and slide scripts can't reach the editor.
 
 ## Tech stack
 
