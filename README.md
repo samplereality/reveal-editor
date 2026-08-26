@@ -63,7 +63,7 @@ Stale tombstoned files are also cleaned off the gist automatically on this brows
 
 - The gist PAT lives in `localStorage`. Any XSS on this site could exfiltrate it. The `gist` scope limits the damage — an attacker could only read/write your gists, not your repos or anything else.
 - If you edit on both machines simultaneously, last-write-wins per project means one set of edits gets overwritten. Sync once before starting on a new machine.
-- GitHub's API rate limit is 5,000 requests/hour for authenticated users, far more than this editor will ever use.
+- GitHub's API rate limit is 5,000 requests/hour for authenticated users, far more than this editor will ever use. But the limit is shared by *everything* using your account (`gh`, VS Code, scripts), so another tool can exhaust it. If that happens the pill shows **Rate limited · retry HH:MM**, auto-sync pauses until the window resets, and your edits stay queued locally and go up in the next successful sync. **Sync now** still works as a manual probe.
 
 ## Hosting it yourself
 

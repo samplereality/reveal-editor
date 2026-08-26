@@ -2867,7 +2867,16 @@ ${sections}
     error: null,
     pushTimer: null,
     inFlight: null,
+    rateLimitedUntil: null,   // ms timestamp from X-RateLimit-Reset after a 403 rate-limit; auto-pushes pause until then
   };
+
+  function isRateLimited() {
+    return !!(sync.rateLimitedUntil && Date.now() < sync.rateLimitedUntil);
+  }
+
+  function formatClockTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
 
   function loadSyncConfig() {
     try {
@@ -2922,7 +2931,7 @@ ${sections}
       iconKey = 'syncing';
       pill.classList.add('is-syncing');
     } else if (sync.status === 'error') {
-      label = 'Sync error';
+      label = isRateLimited() ? `Rate limited · retry ${formatClockTime(sync.rateLimitedUntil)}` : 'Sync error';
       iconKey = 'error';
       pill.classList.add('is-error');
     } else {
@@ -2955,6 +2964,26 @@ ${sections}
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
+      // GitHub's per-user limit (5,000 req/hr, shared by every app and token
+      // on the account) surfaces as 403 with X-RateLimit-Remaining: 0 and
+      // a Unix-seconds reset time. Remember the reset so schedulePush stops
+      // burning further (still-counted) requests until the window rolls over.
+      if (r.status === 403 || r.status === 429) {
+        const remaining = r.headers.get('X-RateLimit-Remaining');
+        const reset = parseInt(r.headers.get('X-RateLimit-Reset') || '', 10);
+        const retryAfter = parseInt(r.headers.get('Retry-After') || '', 10);
+        if (retryAfter > 0) {
+          sync.rateLimitedUntil = Date.now() + retryAfter * 1000;
+        } else if (remaining === '0' && reset > 0) {
+          sync.rateLimitedUntil = reset * 1000;
+        } else if (/rate limit/i.test(body)) {
+          // Headers hidden (e.g. CORS-stripped) — GitHub windows are an hour.
+          sync.rateLimitedUntil = Date.now() + 60 * 60 * 1000;
+        }
+        if (sync.rateLimitedUntil) {
+          throw new Error(`GitHub rate limit reached — auto-sync paused until ${formatClockTime(sync.rateLimitedUntil)}. This limit is shared by everything using your GitHub account (gh, editors, scripts), not just this editor.`);
+        }
+      }
       const msg = (() => {
         try {
           const data = JSON.parse(body);
@@ -2971,6 +3000,7 @@ ${sections}
       throw new Error(`GitHub API ${r.status}: ${msg || r.statusText}`);
     }
     if (r.status === 204) return null;
+    sync.rateLimitedUntil = null;   // a successful call means the window has reset
     return await r.json();
   }
 
@@ -3115,6 +3145,9 @@ ${sections}
   async function syncNow({ silent = false } = {}) {
     if (sync.status === 'off') return;
     if (sync.inFlight) return sync.inFlight;
+    // Silent (automatic) syncs respect the pause; a manual "Sync now" is
+    // allowed to probe in case the limit has lifted early.
+    if (silent && isRateLimited()) { schedulePush(); return; }
     if (sync.pushTimer) { clearTimeout(sync.pushTimer); sync.pushTimer = null; }
     sync.status = 'syncing';
     sync.error = null;
@@ -3258,10 +3291,16 @@ ${sections}
   function schedulePush() {
     if (sync.status === 'off') return;
     clearTimeout(sync.pushTimer);
+    // While rate-limited, defer the push to just past the reset instead of
+    // retrying every few seconds — each 403 still counts against the quota.
+    // Edits stay queued in pushDirty and go up in that one deferred sync.
+    const delay = isRateLimited()
+      ? Math.max(SYNC_AUTO_PUSH_MS, sync.rateLimitedUntil - Date.now() + 2000)
+      : SYNC_AUTO_PUSH_MS;
     sync.pushTimer = setTimeout(() => {
       sync.pushTimer = null;
       syncNow({ silent: true });
-    }, SYNC_AUTO_PUSH_MS);
+    }, delay);
   }
 
   // -------- Sync modal --------
@@ -3281,7 +3320,9 @@ ${sections}
     els.syncSetup.hidden = configured;
     els.syncConnected.hidden = !configured;
     if (configured) {
-      els.syncStatusText.textContent = sync.status;
+      els.syncStatusText.textContent = (sync.status === 'error' && isRateLimited())
+        ? `rate limited until ${formatClockTime(sync.rateLimitedUntil)}`
+        : sync.status;
       els.syncLast.textContent = sync.lastSync ? formatRelative(sync.lastSync) : 'never';
       els.syncGistLink.href = `https://gist.github.com/${sync.gistId}`;
       els.syncGistIdDisplay.textContent = sync.gistId;
@@ -3620,7 +3661,7 @@ ${sections}
         captureCurrentContent();
         saveProject();
       }
-      if (sync.pushTimer) {
+      if (sync.pushTimer && !isRateLimited()) {
         clearTimeout(sync.pushTimer);
         sync.pushTimer = null;
         syncNow({ silent: true });
