@@ -17,7 +17,7 @@ A browser-based WYSIWYG editor for [reveal.js](https://revealjs.com) presentatio
 - **Reveal.js settings, per deck.** Control [reveal.js config options](https://revealjs.com/config/). Settings are stored on the project, travel with `.json` export/import, and apply to the live preview, the standalone HTML export, and the PDF export.
 - **Multiple projects** with a Projects modal — open, duplicate, rename, delete, or export any of them.
 - **Import/Export.** Import from `.json` or `.md`. Export formats include `.json`, `.html`, `.md`, and `.pdf`.
-- **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage. Small icons and SVGs are left untouched.
+/- **Image optimization on paste/drop.** Large photos get resized to 1920 px on the longest side and re-encoded as JPEG (quality 0.85) before storage. Small icons and SVGs are left untouched.
 
 ## How it stores your work
 
