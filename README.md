@@ -90,9 +90,9 @@ python3 -m http.server 8000
 | --- | --- |
 | `Cmd/Ctrl + S` | flush save |
 | `Cmd/Ctrl + Shift + Enter` | new slide after current |
-| `Cmd/Ctrl + P` | preview from start |
+| `Cmd/Ctrl + P` | preview from start (press again to close) |
 | `Cmd/Ctrl + Shift + P` | preview from current slide |
-| `Escape` | close whatever modal is open |
+| `Escape` | close whatever modal is open; in preview, exits overview/fullscreen first, then closes the preview |
 | `↑` `↓` `←` `→` *(in preview)* | navigate |
 | `S` *(in preview)* | speaker view |
 | `F` *(in preview)* | fullscreen |

@@ -94,6 +94,34 @@
     });
   }
 
+  // Editor keyboard shortcuts that must work while the preview iframe has
+  // focus. Keydown events never bubble across the frame boundary, so we
+  // forward them to the parent via postMessage. Capture phase on document
+  // runs before reveal.js's own (bubble-phase) keyboard handler.
+  //
+  //   Escape        -> close the preview, unless reveal's overview is open,
+  //                    in which case reveal handles it (exits overview).
+  //                    Fullscreen is exited by the browser before we see it.
+  //   Cmd/Ctrl+P    -> close the preview (the key that opened it closes it),
+  //                    and keeps the browser's print dialog from opening.
+  //
+  // Overview stays reachable via reveal's `O` key.
+  document.addEventListener('keydown', function (e) {
+    if (window.parent === window) return;              // opened standalone
+    var mod = e.metaKey || e.ctrlKey;
+    var isEsc = e.key === 'Escape';
+    var isPrint = mod && !e.altKey && (e.key === 'p' || e.key === 'P');
+    if (!isEsc && !isPrint) return;
+    if (isEsc) {
+      var inOverview = false;
+      try { inOverview = !!(window.Reveal && Reveal.isOverview && Reveal.isOverview()); } catch (err) {}
+      if (inOverview) return;                            // let reveal exit overview
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try { window.parent.postMessage({ type: 'close-preview' }, '*'); } catch (err) {}
+  }, true);
+
   // Click handler for <a class="linked-image"> elements — open the URL in a
   // sized, centered popup window over the presentation rather than a new tab.
   // Capture phase + stopImmediatePropagation prevents any other listener from

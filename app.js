@@ -2,7 +2,7 @@
 (async () => {
   'use strict';
 
-  const APP_VERSION = '1.0.1'; // semver — single source of truth for the About modal
+  const APP_VERSION = '1.1.0'; // semver — single source of truth for the About modal
   const REVEAL_VERSION = '5.1.0';
   const LIBRARY_KEY = 'reveal-editor:library:v1';
   const LEGACY_STORAGE_KEY = 'reveal-editor:project:v1';
@@ -3549,6 +3549,16 @@ ${sections}
     $('#btn-preview-here').addEventListener('click', () => showPreview({ fromCurrent: true }));
     $('#btn-new').addEventListener('click', () => createProject());
     els.previewClose.addEventListener('click', closePreview);
+    // The preview iframe forwards Escape / Cmd+P here (see preview.js): key
+    // events don't cross the frame boundary, so the document-level handler
+    // below never sees them while the deck has focus. Verify the sender by
+    // window identity rather than origin so this keeps working if
+    // preview.html is hosted on a separate subdomain.
+    window.addEventListener('message', (ev) => {
+      if (ev.data?.type !== 'close-preview') return;
+      if (ev.source !== els.previewFrame.contentWindow) return;
+      if (!els.previewModal.hidden) closePreview();
+    });
     els.themeToggle.addEventListener('click', toggleUiTheme);
     els.notesPopout.addEventListener('click', toggleNotesPanel);
     els.notesPanelClose.addEventListener('click', closeNotesPanel);
@@ -3632,10 +3642,13 @@ ${sections}
       const inEditor = e.target === els.editor || els.editor.contains(e.target);
       if (mod && e.key === 's') { e.preventDefault(); saveProject(); }
       else if (mod && e.shiftKey && e.key === 'Enter') { e.preventDefault(); addSlide(); }
-      else if (mod && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        e.preventDefault(); showPreview({ fromCurrent: true });
+      else if (mod && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault();
+        // Cmd/Ctrl+P toggles: if the preview is already open (focus on the
+        // modal chrome rather than the iframe), close it instead of reopening.
+        if (!els.previewModal.hidden) closePreview();
+        else showPreview({ fromCurrent: e.shiftKey });
       }
-      else if (mod && e.key === 'p') { e.preventDefault(); showPreview(); }
       // Undo/redo: only when focus is OUTSIDE the slide editor, so the
       // browser's native contenteditable undo keeps working for typing.
       else if (mod && !inEditor && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
