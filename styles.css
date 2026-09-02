@@ -106,6 +106,7 @@ textarea { resize: vertical; }
 #deck-title { width: 280px; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.field[hidden] { display: none; }
 .field.grow { flex: 1; }
 .field select, .field input, .field textarea { color: var(--text); }
 
@@ -402,6 +403,11 @@ body.light .context-menu button.danger { color: #b91c1c; }
   display: block;
   background: #000;
 }
+/* Match reveal.js, which covers the slide with background video unless the
+   slide sets data-background-size="contain". The browser default for <video>
+   is contain, so cover has to be stated explicitly. */
+.slide-bg-layer video { object-fit: cover; }
+.slide-bg-layer[data-bg-size="contain"] video { object-fit: contain; }
 
 .slide-bg-badge {
   position: absolute;

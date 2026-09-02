@@ -42,6 +42,8 @@
     bgType: $('#slide-bg-type'),
     bgValue: $('#slide-bg-value'),
     bgLabel: $('#slide-bg-label'),
+    bgSize: $('#slide-bg-size'),
+    bgSizeField: $('#slide-bg-size-field'),
     vertical: $('#slide-vertical'),
     fragmentType: $('#fragment-type'),
     notes: $('#slide-notes'),
@@ -103,6 +105,9 @@
     'highlight-red', 'highlight-green', 'highlight-blue', 'highlight-current-red'
   ];
 
+  // Background types for which reveal.js honors data-background-size.
+  const BG_FIT_TYPES = ['image', 'video'];
+
   const BG_PLACEHOLDERS = {
     color: '#000, rebeccapurple, linear-gradient(...)',
     image: 'https://example.com/photo.jpg',
@@ -117,7 +122,7 @@
       content,
       notes: '',
       transition: '',
-      background: { type: '', value: '' },
+      background: { type: '', value: '', size: '' },
       vertical: false,
     };
   }
@@ -135,6 +140,11 @@
     }
     if (!s.background.type) s.background.type = '';
     if (!s.background.value) s.background.value = '';
+    // 'size' maps to reveal's data-background-size; '' means reveal's default
+    // (cover). Only image and video backgrounds honor it.
+    if (!s.background.size || !BG_FIT_TYPES.includes(s.background.type)) {
+      s.background.size = '';
+    }
     if (typeof s.vertical !== 'boolean') s.vertical = false;
     return s;
   }
@@ -686,6 +696,7 @@
     els.transition.value = slide.transition || '';
     els.bgType.value = slide.background.type || '';
     els.bgValue.value = slide.background.value || '';
+    els.bgSize.value = slide.background.size || '';
     refreshBgValueField();
     els.vertical.checked = !!slide.vertical;
     els.notes.value = slide.notes || '';
@@ -703,18 +714,23 @@
     const layer = els.bgLayer;
     const badge = els.bgBadge;
     layer.style.background = '';
+    layer.style.backgroundSize = '';
+    layer.removeAttribute('data-bg-size');
     layer.replaceChildren();
     badge.hidden = true;
     badge.textContent = '';
     if (!slide || !slide.background.type || !slide.background.value) return;
 
     const { type, value } = slide.background;
+    const size = BG_FIT_TYPES.includes(type) ? (slide.background.size || '') : '';
+    if (size) layer.setAttribute('data-bg-size', size);
     let label = type;
     if (type === 'color') {
       layer.style.background = value;
     } else if (type === 'image') {
       const safe = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       layer.style.backgroundImage = `url("${safe}")`;
+      if (size) layer.style.backgroundSize = size;
     } else if (type === 'video') {
       const v = document.createElement('video');
       v.src = value;
@@ -854,6 +870,7 @@
       : type === 'iframe' ? 'Iframe URL'
       : type === 'color' ? 'Color / CSS'
       : 'Value';
+    els.bgSizeField.hidden = !BG_FIT_TYPES.includes(type);
   }
 
   function decorateFragments() {
@@ -1663,6 +1680,9 @@ ${sections}
       const attr = s.background.type === 'color' ? 'data-background'
         : `data-background-${s.background.type}`;
       attrs.push(`${attr}="${escapeAttr(s.background.value)}"`);
+      if (s.background.size) {
+        attrs.push(`data-background-size="${escapeAttr(s.background.size)}"`);
+      }
     }
     const notes = s.notes ? `<aside class="notes">${escapeHtml(s.notes)}</aside>` : '';
     const head = attrs.length ? `<section ${attrs.join(' ')}>` : '<section>';
@@ -1860,6 +1880,9 @@ ${sections}
       const k = s.background.type === 'color' ? 'data-background'
         : `data-background-${s.background.type}`;
       attrs.push(`${k}="${s.background.value.replace(/"/g, '&quot;')}"`);
+      if (s.background.size) {
+        attrs.push(`data-background-size="${s.background.size.replace(/"/g, '&quot;')}"`);
+      }
     }
     if (attrs.length) parts.push(`<!-- .slide: ${attrs.join(' ')} -->`);
 
@@ -2157,19 +2180,27 @@ ${sections}
   function applyMarkdownSlideAttrs(attrStr, slide) {
     const re = /([\w-]+)\s*=\s*"([^"]*)"/g;
     let m;
+    let size = '';
     while ((m = re.exec(attrStr)) !== null) {
       const key = m[1];
       const val = m[2].replace(/&quot;/g, '"');
       if (key === 'data-transition') {
         slide.transition = val;
       } else if (key === 'data-background') {
-        slide.background = { type: 'color', value: val };
+        slide.background = { type: 'color', value: val, size: '' };
+      } else if (key === 'data-background-size') {
+        // Modifies whichever background attribute this slide also carries,
+        // which the regex may not have reached yet — apply it after the loop.
+        size = val;
       } else if (key.startsWith('data-background-')) {
         const type = key.slice('data-background-'.length);
         if (type === 'color' || type === 'image' || type === 'video' || type === 'iframe') {
-          slide.background = { type, value: val };
+          slide.background = { type, value: val, size: '' };
         }
       }
+    }
+    if (size && slide.background && BG_FIT_TYPES.includes(slide.background.type)) {
+      slide.background.size = size;
     }
   }
 
@@ -3469,14 +3500,22 @@ ${sections}
       const slide = currentSlide();
       slide.background.type = els.bgType.value;
       if (!els.bgType.value) slide.background.value = '';
+      if (!BG_FIT_TYPES.includes(slide.background.type)) slide.background.size = '';
       refreshBgValueField();
       els.bgValue.value = slide.background.value || '';
+      els.bgSize.value = slide.background.size || '';
       applyEditorBackground();
       scheduleSave();
     });
     els.bgValue.addEventListener('input', () => {
       snapshotForTextField('bgValue');
       currentSlide().background.value = els.bgValue.value;
+      applyEditorBackground();
+      scheduleSave();
+    });
+    els.bgSize.addEventListener('change', () => {
+      recordHistory();
+      currentSlide().background.size = els.bgSize.value;
       applyEditorBackground();
       scheduleSave();
     });
