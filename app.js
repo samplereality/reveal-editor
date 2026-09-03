@@ -25,6 +25,29 @@
   const els = {
     deckTitle: $('#deck-title'),
     themeSelect: $('#theme-select'),
+    themeEditBtn: $('#btn-theme-edit'),
+    themeModal: $('#theme-modal'),
+    themeClose: $('#theme-close'),
+    ctBase: $('#ct-base'),
+    ctHeadingFont: $('#ct-heading-font'),
+    ctHeadingFontCustomRow: $('#ct-heading-font-custom-row'),
+    ctHeadingFontCustom: $('#ct-heading-font-custom'),
+    ctBodyFont: $('#ct-body-font'),
+    ctBodyFontCustomRow: $('#ct-body-font-custom-row'),
+    ctBodyFontCustom: $('#ct-body-font-custom'),
+    ctFontSize: $('#ct-font-size'),
+    ctBgColor: $('#ct-bg-color'),
+    ctBgSwatch: $('#ct-bg-swatch'),
+    ctTextColor: $('#ct-text-color'),
+    ctTextSwatch: $('#ct-text-swatch'),
+    ctHeadingColor: $('#ct-heading-color'),
+    ctHeadingSwatch: $('#ct-heading-swatch'),
+    ctLinkColor: $('#ct-link-color'),
+    ctLinkSwatch: $('#ct-link-swatch'),
+    ctHeadingTransform: $('#ct-heading-transform'),
+    ctLetterSpacing: $('#ct-letter-spacing'),
+    ctHeadingShadow: $('#ct-heading-shadow'),
+    ctReset: $('#ct-reset'),
     slideList: $('#slide-list'),
     addSlide: $('#btn-add-slide'),
     editor: $('#slide-editor'),
@@ -115,6 +138,158 @@
     iframe: 'https://example.com/',
   };
 
+  // -------- Custom theme --------
+  // A curated set of Google Fonts families for the theme editor pickers;
+  // 'fb' is the generic family appended to the font stack as a fallback.
+  // Any other family can still be typed in by exact name.
+  const GOOGLE_FONTS = [
+    { group: 'Sans serif', name: 'Inter', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Roboto', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Open Sans', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Lato', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Montserrat', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Poppins', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Raleway', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Nunito', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Work Sans', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Rubik', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Karla', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Manrope', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Barlow', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Jost', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'DM Sans', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Outfit', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Figtree', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Fira Sans', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Source Sans 3', fb: 'sans-serif' },
+    { group: 'Sans serif', name: 'Mulish', fb: 'sans-serif' },
+    { group: 'Serif', name: 'Playfair Display', fb: 'serif' },
+    { group: 'Serif', name: 'Merriweather', fb: 'serif' },
+    { group: 'Serif', name: 'Lora', fb: 'serif' },
+    { group: 'Serif', name: 'EB Garamond', fb: 'serif' },
+    { group: 'Serif', name: 'Libre Baskerville', fb: 'serif' },
+    { group: 'Serif', name: 'Cormorant Garamond', fb: 'serif' },
+    { group: 'Serif', name: 'Crimson Text', fb: 'serif' },
+    { group: 'Serif', name: 'Source Serif 4', fb: 'serif' },
+    { group: 'Serif', name: 'Spectral', fb: 'serif' },
+    { group: 'Serif', name: 'Bitter', fb: 'serif' },
+    { group: 'Serif', name: 'Domine', fb: 'serif' },
+    { group: 'Serif', name: 'Vollkorn', fb: 'serif' },
+    { group: 'Serif', name: 'PT Serif', fb: 'serif' },
+    { group: 'Serif', name: 'Literata', fb: 'serif' },
+    { group: 'Serif', name: 'IM Fell English', fb: 'serif' },
+    { group: 'Serif', name: 'IM Fell English SC', fb: 'serif' },
+    { group: 'Serif', name: 'IM Fell DW Pica', fb: 'serif' },
+    { group: 'Display', name: 'Oswald', fb: 'sans-serif' },
+    { group: 'Display', name: 'Anton', fb: 'sans-serif' },
+    { group: 'Display', name: 'Bebas Neue', fb: 'sans-serif' },
+    { group: 'Display', name: 'Archivo Black', fb: 'sans-serif' },
+    { group: 'Display', name: 'Alfa Slab One', fb: 'serif' },
+    { group: 'Display', name: 'Abril Fatface', fb: 'serif' },
+    { group: 'Display', name: 'Righteous', fb: 'sans-serif' },
+    { group: 'Display', name: 'Lobster', fb: 'cursive' },
+    { group: 'Display', name: 'Special Elite', fb: 'monospace' },
+    { group: 'Display', name: 'Amatic SC', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Caveat', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Pacifico', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Permanent Marker', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Shadows Into Light', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Dancing Script', fb: 'cursive' },
+    { group: 'Handwriting', name: 'Kalam', fb: 'cursive' },
+    { group: 'Monospace', name: 'Fira Code', fb: 'monospace' },
+    { group: 'Monospace', name: 'JetBrains Mono', fb: 'monospace' },
+    { group: 'Monospace', name: 'IBM Plex Mono', fb: 'monospace' },
+    { group: 'Monospace', name: 'Space Mono', fb: 'monospace' },
+    { group: 'Monospace', name: 'Inconsolata', fb: 'monospace' },
+  ];
+
+  // The custom theme overlays these fields on a built-in base theme via
+  // reveal's --r-* CSS custom properties. '' / 0 / false mean "use the base
+  // theme's value" so a fresh custom theme looks identical to its base.
+  const CUSTOM_THEME_DEFAULTS = {
+    base: 'black',
+    headingFont: '',
+    bodyFont: '',
+    backgroundColor: '',
+    textColor: '',
+    headingColor: '',
+    linkColor: '',
+    fontSize: '',
+    headingTransform: '',
+    headingLetterSpacing: '',
+    headingShadow: false,
+  };
+
+  function normalizeCustomTheme(t) {
+    const out = { ...CUSTOM_THEME_DEFAULTS };
+    if (t && typeof t === 'object') {
+      Object.keys(out).forEach(k => { if (t[k] !== undefined) out[k] = t[k]; });
+    }
+    return out;
+  }
+
+  // Strip characters that could break out of a CSS declaration or a <style>
+  // block; the values land in generated stylesheets in exports.
+  function cssValue(v) {
+    return String(v).replace(/[;{}<>]/g, '').trim();
+  }
+
+  function fontStack(family) {
+    const name = cssValue(family).replace(/["']/g, '');
+    const known = GOOGLE_FONTS.find(f => f.name === name);
+    return `"${name}", ${known ? known.fb : 'sans-serif'}`;
+  }
+
+  // Google Fonts URL for the families the theme uses. The classic v1 CSS API
+  // serves whichever of the requested variants exist; css2 rejects the whole
+  // request if any single weight is missing, which typed-in families would
+  // trip over constantly.
+  function googleFontsHref(t) {
+    const fams = [...new Set([t.headingFont, t.bodyFont]
+      .map(f => String(f || '').trim()).filter(Boolean))];
+    if (!fams.length) return '';
+    const q = fams
+      .map(f => encodeURIComponent(f).replace(/%20/g, '+') + ':400,700,400italic,700italic')
+      .join('|');
+    return `https://fonts.googleapis.com/css?family=${q}&display=swap`;
+  }
+
+  function customThemeCss(t) {
+    const vars = [];
+    if (t.bodyFont) vars.push(`--r-main-font: ${fontStack(t.bodyFont)};`);
+    if (t.headingFont) vars.push(`--r-heading-font: ${fontStack(t.headingFont)};`);
+    if (t.backgroundColor) vars.push(`--r-background-color: ${cssValue(t.backgroundColor)};`);
+    if (t.textColor) vars.push(`--r-main-color: ${cssValue(t.textColor)};`);
+    if (t.headingColor) vars.push(`--r-heading-color: ${cssValue(t.headingColor)};`);
+    if (t.linkColor) vars.push(`--r-link-color: ${cssValue(t.linkColor)};`);
+    const size = parseFloat(t.fontSize);
+    if (size > 0) vars.push(`--r-main-font-size: ${size}px;`);
+    if (t.headingTransform) vars.push(`--r-heading-text-transform: ${cssValue(t.headingTransform)};`);
+    const ls = parseFloat(t.headingLetterSpacing);
+    if (!Number.isNaN(ls) && ls !== 0) vars.push(`--r-heading-letter-spacing: ${ls}px;`);
+    if (t.headingShadow) vars.push('--r-heading-text-shadow: 2px 2px 8px rgba(0, 0, 0, .45);');
+    const rules = [];
+    if (vars.length) rules.push(`:root {\n  ${vars.join('\n  ')}\n}`);
+    if (t.backgroundColor) {
+      // Theme templates paint the viewport with background-color, which
+      // rejects gradients; an explicit shorthand handles color and gradient.
+      rules.push(`.reveal-viewport {\n  background: ${cssValue(t.backgroundColor)};\n}`);
+    }
+    return rules.join('\n');
+  }
+
+  // The pieces the preview iframe / exports need to render a theme: the
+  // built-in stylesheet to link, plus (for custom themes) a Google Fonts
+  // href and a CSS override block.
+  function themePayloadBits(p) {
+    const custom = p.theme === 'custom' ? normalizeCustomTheme(p.customTheme) : null;
+    return {
+      theme: custom ? custom.base : p.theme,
+      fontsHref: custom ? googleFontsHref(custom) : '',
+      customCss: custom ? customThemeCss(custom) : '',
+    };
+  }
+
   // -------- State --------
   function newSlide(content = '<h2>New slide</h2>') {
     return {
@@ -159,6 +334,7 @@
       modifiedAt: now,
       title: name || 'Untitled presentation',
       theme: 'black',
+      customTheme: normalizeCustomTheme(null),
       slides: [first],
       currentId: first.id,
       config: defaultRevealConfig(),
@@ -176,6 +352,7 @@
     if (!p.title) p.title = fallbackName || 'Untitled presentation';
     if (!p.name) p.name = p.title;
     if (!p.theme) p.theme = 'black';
+    p.customTheme = normalizeCustomTheme(p.customTheme);
     if (!p.config || typeof p.config !== 'object') p.config = defaultRevealConfig();
     else p.config = { ...defaultRevealConfig(), ...p.config };
     const now = Date.now();
@@ -779,6 +956,7 @@
       title: state.title,
       name: state.name,
       theme: state.theme,
+      customTheme: { ...(state.customTheme || {}) },
       currentId: state.currentId,
       slides: JSON.parse(JSON.stringify(state.slides)),
       config: { ...(state.config || {}) },
@@ -792,6 +970,7 @@
     state.title = snap.title;
     if (snap.name !== undefined) state.name = snap.name;
     state.theme = snap.theme;
+    state.customTheme = normalizeCustomTheme(snap.customTheme);
     state.slides = snap.slides;
     state.currentId = snap.currentId;
     if (snap.config) state.config = { ...snap.config };
@@ -802,6 +981,7 @@
     // Refresh any open panels that display restored fields.
     if (!els.settingsModal.hidden) renderSettingsForm();
     if (!els.projectsModal.hidden) renderProjectsList();
+    if (!els.themeModal.hidden) renderThemeForm();
     scheduleSave();
   }
 
@@ -885,6 +1065,7 @@
   function renderAll() {
     els.deckTitle.value = state.title;
     els.themeSelect.value = state.theme;
+    els.themeEditBtn.hidden = state.theme !== 'custom';
     applyDeckTheme(state.theme);
     renderSidebar();
     renderEditor();
@@ -904,8 +1085,47 @@
       link.addEventListener('load', applySlideEffects);
       document.head.appendChild(link);
     }
-    const url = `https://cdn.jsdelivr.net/npm/reveal.js@${REVEAL_VERSION}/dist/theme/${theme}.css`;
+    const custom = theme === 'custom'
+      ? normalizeCustomTheme(state && state.customTheme)
+      : null;
+    const base = custom ? custom.base : theme;
+    const url = `https://cdn.jsdelivr.net/npm/reveal.js@${REVEAL_VERSION}/dist/theme/${base}.css`;
     if (link.getAttribute('href') !== url) link.setAttribute('href', url);
+    applyCustomThemeExtras(custom);
+  }
+
+  // Injects (or clears) the custom theme's Google Fonts link and --r-*
+  // override style in the editor document. The style element is re-appended
+  // on every call: :root ties are broken by document order, and the
+  // overrides must sit after the base theme <link> to win.
+  function applyCustomThemeExtras(custom) {
+    const href = custom ? googleFontsHref(custom) : '';
+    const css = custom ? customThemeCss(custom) : '';
+    let fonts = document.getElementById('custom-fonts-css');
+    if (href) {
+      if (!fonts) {
+        fonts = document.createElement('link');
+        fonts.id = 'custom-fonts-css';
+        fonts.rel = 'stylesheet';
+        // Newly loaded font faces change text metrics.
+        fonts.addEventListener('load', applySlideEffects);
+        document.head.appendChild(fonts);
+      }
+      if (fonts.getAttribute('href') !== href) fonts.setAttribute('href', href);
+    } else if (fonts) {
+      fonts.remove();
+    }
+    let style = document.getElementById('custom-theme-css');
+    if (css) {
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'custom-theme-css';
+      }
+      if (style.textContent !== css) style.textContent = css;
+      document.head.appendChild(style);
+    } else if (style) {
+      style.remove();
+    }
   }
 
   // Reveal's r-fit-text scales an element's font-size to fill the slide width;
@@ -1572,7 +1792,11 @@
   // -------- Preview / Export --------
   function buildDeckHtml({ standalone, startAt, project = state }) {
     const cdn = `https://cdn.jsdelivr.net/npm/reveal.js@${REVEAL_VERSION}`;
-    const themeHref = `${cdn}/dist/theme/${project.theme}.css`;
+    const themeBits = themePayloadBits(project);
+    const themeHref = `${cdn}/dist/theme/${themeBits.theme}.css`;
+    const customHead =
+      (themeBits.fontsHref ? `\n<link rel="stylesheet" href="${themeBits.fontsHref}">` : '')
+      + (themeBits.customCss ? `\n<style>\n${themeBits.customCss}\n</style>` : '');
     const revealCss = `${cdn}/dist/reveal.css`;
     const revealJs = `${cdn}/dist/reveal.js`;
     const notesJs = `${cdn}/plugin/notes/notes.js`;
@@ -1592,7 +1816,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(project.title || 'Presentation')}</title>
 <link rel="stylesheet" href="${revealCss}">
-<link rel="stylesheet" href="${themeHref}" id="theme">
+<link rel="stylesheet" href="${themeHref}" id="theme">${customHead}
 </head>
 <body>
 <div class="reveal"><div class="slides">
@@ -1695,7 +1919,7 @@ ${sections}
     const payload = {
       type: 'render-deck',
       version: REVEAL_VERSION,
-      theme: state.theme,
+      ...themePayloadBits(state),
       title: state.title || 'Presentation',
       sections: buildSections(state.slides),
       start: startAt,
@@ -1834,7 +2058,7 @@ ${sections}
     const payload = {
       type: 'render-deck',
       version: REVEAL_VERSION,
-      theme: p.theme,
+      ...themePayloadBits(p),
       title: p.title || p.name || 'Presentation',
       sections: buildSections(p.slides),
       printMode: true,
@@ -2016,6 +2240,7 @@ ${sections}
       name: p.name,
       title: p.title,
       theme: p.theme,
+      customTheme: p.customTheme,
       slides: p.slides,
       currentId: p.currentId,
       config: p.config,
@@ -2113,6 +2338,7 @@ ${sections}
       name,
       title: name,
       theme: (state && state.theme) || 'black',
+      customTheme: state && state.customTheme,
       slides,
       currentId: slides[0].id,
       createdAt: now,
@@ -2270,6 +2496,7 @@ ${sections}
           name,
           title: name,
           theme: (state && state.theme) || 'black',
+          customTheme: state && state.customTheme,
           slides,
           currentId: slides[0].id,
           createdAt: now,
@@ -2393,6 +2620,84 @@ ${sections}
   function restoreModalFocus() {
     if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
     modalReturnFocus = null;
+  }
+
+  // -------- Custom theme modal --------
+  function openThemeModal() {
+    renderThemeForm();
+    els.themeModal.hidden = false;
+    focusModal(els.themeModal);
+  }
+
+  function closeThemeModal() {
+    els.themeModal.hidden = true;
+    endTextEditSession();
+    restoreModalFocus();
+  }
+
+  function populateFontSelect(sel) {
+    sel.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '(theme default)';
+    sel.appendChild(none);
+    let group = null;
+    let og = null;
+    GOOGLE_FONTS.forEach(f => {
+      if (f.group !== group) {
+        group = f.group;
+        og = document.createElement('optgroup');
+        og.label = f.group;
+        sel.appendChild(og);
+      }
+      const o = document.createElement('option');
+      o.value = f.name;
+      o.textContent = f.name;
+      og.appendChild(o);
+    });
+    const custom = document.createElement('option');
+    custom.value = '__custom__';
+    custom.textContent = 'Custom…';
+    sel.appendChild(custom);
+  }
+
+  function setFontControls(sel, row, input, value) {
+    const known = !value || GOOGLE_FONTS.some(f => f.name === value);
+    sel.value = known ? value : '__custom__';
+    row.hidden = known;
+    input.value = known ? '' : value;
+  }
+
+  function syncSwatch(swatch, value) {
+    const v = String(value || '').trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) swatch.value = v;
+  }
+
+  function renderThemeForm() {
+    const t = state.customTheme = normalizeCustomTheme(state.customTheme);
+    els.ctBase.value = t.base;
+    setFontControls(els.ctHeadingFont, els.ctHeadingFontCustomRow, els.ctHeadingFontCustom, t.headingFont);
+    setFontControls(els.ctBodyFont, els.ctBodyFontCustomRow, els.ctBodyFontCustom, t.bodyFont);
+    els.ctFontSize.value = t.fontSize || '';
+    els.ctBgColor.value = t.backgroundColor;
+    els.ctTextColor.value = t.textColor;
+    els.ctHeadingColor.value = t.headingColor;
+    els.ctLinkColor.value = t.linkColor;
+    syncSwatch(els.ctBgSwatch, t.backgroundColor);
+    syncSwatch(els.ctTextSwatch, t.textColor);
+    syncSwatch(els.ctHeadingSwatch, t.headingColor);
+    syncSwatch(els.ctLinkSwatch, t.linkColor);
+    els.ctHeadingTransform.value = t.headingTransform;
+    els.ctLetterSpacing.value = t.headingLetterSpacing || '';
+    els.ctHeadingShadow.checked = !!t.headingShadow;
+  }
+
+  function customThemeChanged() {
+    applyDeckTheme(state.theme);
+    // Base font size (and font swaps) change text metrics that r-fit-text
+    // and r-stretch sized themselves against.
+    applySlideEffects();
+    scheduleSave();
   }
 
   function openSettingsModal() {
@@ -3422,8 +3727,92 @@ ${sections}
     els.themeSelect.addEventListener('change', () => {
       recordHistory();
       state.theme = els.themeSelect.value;
+      els.themeEditBtn.hidden = state.theme !== 'custom';
       applyDeckTheme(state.theme);
+      if (state.theme === 'custom') openThemeModal();
       scheduleSave();
+    });
+
+    // Custom theme drawer.
+    populateFontSelect(els.ctHeadingFont);
+    populateFontSelect(els.ctBodyFont);
+    els.themeEditBtn.addEventListener('click', openThemeModal);
+    els.themeClose.addEventListener('click', closeThemeModal);
+    els.ctBase.addEventListener('change', () => {
+      recordHistory();
+      state.customTheme.base = els.ctBase.value;
+      customThemeChanged();
+    });
+    const bindFontPicker = (sel, row, input, key) => {
+      sel.addEventListener('change', () => {
+        recordHistory();
+        if (sel.value === '__custom__') {
+          row.hidden = false;
+          state.customTheme[key] = input.value.trim();
+          input.focus();
+        } else {
+          row.hidden = true;
+          input.value = '';
+          state.customTheme[key] = sel.value;
+        }
+        customThemeChanged();
+      });
+      input.addEventListener('input', () => {
+        snapshotForTextField('ct-' + key);
+        state.customTheme[key] = input.value.trim();
+        customThemeChanged();
+      });
+      input.addEventListener('blur', endTextEditSession);
+    };
+    bindFontPicker(els.ctHeadingFont, els.ctHeadingFontCustomRow, els.ctHeadingFontCustom, 'headingFont');
+    bindFontPicker(els.ctBodyFont, els.ctBodyFontCustomRow, els.ctBodyFontCustom, 'bodyFont');
+    const bindColorPair = (text, swatch, key) => {
+      text.addEventListener('input', () => {
+        snapshotForTextField('ct-' + key);
+        state.customTheme[key] = text.value.trim();
+        syncSwatch(swatch, text.value);
+        customThemeChanged();
+      });
+      text.addEventListener('blur', endTextEditSession);
+      swatch.addEventListener('input', () => {
+        snapshotForTextField('ct-' + key);
+        state.customTheme[key] = swatch.value;
+        text.value = swatch.value;
+        customThemeChanged();
+      });
+      swatch.addEventListener('change', endTextEditSession);
+    };
+    bindColorPair(els.ctBgColor, els.ctBgSwatch, 'backgroundColor');
+    bindColorPair(els.ctTextColor, els.ctTextSwatch, 'textColor');
+    bindColorPair(els.ctHeadingColor, els.ctHeadingSwatch, 'headingColor');
+    bindColorPair(els.ctLinkColor, els.ctLinkSwatch, 'linkColor');
+    els.ctFontSize.addEventListener('input', () => {
+      snapshotForTextField('ct-fontSize');
+      state.customTheme.fontSize = els.ctFontSize.value;
+      customThemeChanged();
+    });
+    els.ctFontSize.addEventListener('blur', endTextEditSession);
+    els.ctLetterSpacing.addEventListener('input', () => {
+      snapshotForTextField('ct-letterSpacing');
+      state.customTheme.headingLetterSpacing = els.ctLetterSpacing.value;
+      customThemeChanged();
+    });
+    els.ctLetterSpacing.addEventListener('blur', endTextEditSession);
+    els.ctHeadingTransform.addEventListener('change', () => {
+      recordHistory();
+      state.customTheme.headingTransform = els.ctHeadingTransform.value;
+      customThemeChanged();
+    });
+    els.ctHeadingShadow.addEventListener('change', () => {
+      recordHistory();
+      state.customTheme.headingShadow = els.ctHeadingShadow.checked;
+      customThemeChanged();
+    });
+    els.ctReset.addEventListener('click', () => {
+      recordHistory();
+      state.customTheme = normalizeCustomTheme(null);
+      renderThemeForm();
+      customThemeChanged();
     });
 
     els.addSlide.addEventListener('click', () => addSlide());
@@ -3664,6 +4053,7 @@ ${sections}
         if (!els.slideMenu.hidden) hideSlideContextMenu();
         else if (!els.previewModal.hidden) closePreview();
         else if (!els.projectsModal.hidden) closeProjectsModal();
+        else if (!els.themeModal.hidden) closeThemeModal();
         else if (!els.settingsModal.hidden) closeSettingsModal();
         else if (!els.syncModal.hidden) closeSyncModal();
         else if (!els.aboutModal.hidden) { els.aboutModal.hidden = true; restoreModalFocus(); }

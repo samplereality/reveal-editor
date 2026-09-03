@@ -35,7 +35,9 @@
         <option value="solarized">solarized</option>
         <option value="blood">blood</option>
         <option value="moon">moon</option>
+        <option value="custom">custom…</option>
       </select>
+      <button type="button" id="btn-theme-edit" title="Edit custom theme" aria-label="Edit custom theme" hidden><i class="ph ph-palette"></i></button>
     </label>
     <button id="btn-preview" type="button" title="Preview from start (P)">Preview</button>
     <button id="btn-preview-here" type="button" title="Preview starting from the current slide (Shift+P)">Preview from Here</button>
@@ -285,6 +287,111 @@
       <p>A lightweight, browser-based editor for building <a href="https://revealjs.com/" target="_blank" rel="noopener noreferrer">reveal.js</a> presentations. Decks live in your browser—nothing is uploaded. Made by Mark Sample.</p>
       <p>Source code, issues, and contributions: <a href="https://github.com/samplereality/reveal-editor/" target="_blank" rel="noopener noreferrer">github.com/samplereality/reveal-editor</a></p>
       <p class="about-version">Version <span id="about-version-number"></span></p>
+    </div>
+  </div>
+</div>
+
+<div id="theme-modal" class="modal theme-modal" hidden>
+  <div class="theme-card">
+    <div class="modal-head">
+      <strong>Custom Theme</strong>
+      <button type="button" id="theme-close">Close</button>
+    </div>
+    <div class="settings-body">
+      <p class="settings-intro">Build a theme for this deck: start from a built-in reveal.js theme, then override fonts, colors, and heading effects. Changes apply live — the slide behind this panel updates as you go.</p>
+      <form id="theme-form" class="settings-form">
+        <h4>Base</h4>
+        <div class="settings-row">
+          <label for="ct-base">Base theme
+            <span class="help">Anything you leave blank below falls back to this theme</span>
+          </label>
+          <select id="ct-base">
+            <option value="black">black</option>
+            <option value="white">white</option>
+            <option value="league">league</option>
+            <option value="beige">beige</option>
+            <option value="sky">sky</option>
+            <option value="night">night</option>
+            <option value="serif">serif</option>
+            <option value="simple">simple</option>
+            <option value="solarized">solarized</option>
+            <option value="blood">blood</option>
+            <option value="moon">moon</option>
+          </select>
+        </div>
+
+        <h4>Fonts</h4>
+        <div class="settings-row">
+          <label for="ct-heading-font">Heading font
+            <span class="help">Loaded from Google Fonts</span>
+          </label>
+          <select id="ct-heading-font"></select>
+        </div>
+        <div class="settings-row ct-custom-font" id="ct-heading-font-custom-row" hidden>
+          <label for="ct-heading-font-custom">Custom family
+            <span class="help">Exact name as on fonts.google.com</span>
+          </label>
+          <input type="text" id="ct-heading-font-custom" placeholder="e.g. Bricolage Grotesque">
+        </div>
+        <div class="settings-row">
+          <label for="ct-body-font">Body font</label>
+          <select id="ct-body-font"></select>
+        </div>
+        <div class="settings-row ct-custom-font" id="ct-body-font-custom-row" hidden>
+          <label for="ct-body-font-custom">Custom family
+            <span class="help">Exact name as on fonts.google.com</span>
+          </label>
+          <input type="text" id="ct-body-font-custom" placeholder="e.g. Atkinson Hyperlegible">
+        </div>
+        <div class="settings-row">
+          <label for="ct-font-size">Base font size (px)
+            <span class="help">Reveal themes default to 40px at 960px width</span>
+          </label>
+          <input type="number" id="ct-font-size" min="10" max="120" step="1" placeholder="theme default">
+        </div>
+
+        <h4>Colors</h4>
+        <div class="settings-row">
+          <label for="ct-bg-color">Background
+            <span class="help">Color or CSS gradient; blank = theme default</span>
+          </label>
+          <span class="color-pair"><input type="color" id="ct-bg-swatch" aria-label="Pick background color"><input type="text" id="ct-bg-color" placeholder="#0b1a2a or linear-gradient(…)"></span>
+        </div>
+        <div class="settings-row">
+          <label for="ct-text-color">Text</label>
+          <span class="color-pair"><input type="color" id="ct-text-swatch" aria-label="Pick text color"><input type="text" id="ct-text-color" placeholder="theme default"></span>
+        </div>
+        <div class="settings-row">
+          <label for="ct-heading-color">Headings</label>
+          <span class="color-pair"><input type="color" id="ct-heading-swatch" aria-label="Pick heading color"><input type="text" id="ct-heading-color" placeholder="theme default"></span>
+        </div>
+        <div class="settings-row">
+          <label for="ct-link-color">Links</label>
+          <span class="color-pair"><input type="color" id="ct-link-swatch" aria-label="Pick link color"><input type="text" id="ct-link-color" placeholder="theme default"></span>
+        </div>
+
+        <h4>Heading effects</h4>
+        <div class="settings-row">
+          <label for="ct-heading-transform">Case</label>
+          <select id="ct-heading-transform">
+            <option value="">theme default</option>
+            <option value="none">As typed</option>
+            <option value="uppercase">UPPERCASE</option>
+            <option value="capitalize">Capitalize Each Word</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <label for="ct-letter-spacing">Letter spacing (px)</label>
+          <input type="number" id="ct-letter-spacing" min="-5" max="30" step="0.5" placeholder="theme default">
+        </div>
+        <div class="settings-row">
+          <label for="ct-heading-shadow">Text shadow</label>
+          <input type="checkbox" id="ct-heading-shadow">
+        </div>
+      </form>
+      <div class="settings-actions">
+        <button type="button" id="ct-reset" class="danger">Reset custom theme</button>
+      </div>
     </div>
   </div>
 </div>

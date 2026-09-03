@@ -35,6 +35,20 @@
     var cdn = 'https://cdn.jsdelivr.net/npm/reveal.js@' + payload.version;
     setHref('reveal-css', cdn + '/dist/reveal.css');
     setHref('theme-css', cdn + '/dist/theme/' + payload.theme + '.css');
+    // Custom theme: a Google Fonts stylesheet plus a block of --r-* variable
+    // overrides. Appended to <head> so the overrides sit after the base
+    // theme's <link> and win the :root specificity tie on document order.
+    if (payload.fontsHref) {
+      var fonts = document.createElement('link');
+      fonts.rel = 'stylesheet';
+      fonts.href = payload.fontsHref;
+      document.head.appendChild(fonts);
+    }
+    if (payload.customCss) {
+      var customStyle = document.createElement('style');
+      customStyle.textContent = payload.customCss;
+      document.head.appendChild(customStyle);
+    }
     document.title = payload.title || 'Preview';
 
     var slides = document.querySelector('.slides');

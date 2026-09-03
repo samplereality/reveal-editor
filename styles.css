@@ -382,7 +382,11 @@ body.light .context-menu button.danger { color: #b91c1c; }
   padding: 40px 60px;
   outline: none;
   overflow: auto;
-  font-size: 22px;
+  /* The editor renders denser than the real deck: .55 of the theme's base
+     size lands close to the 22px this stage was historically hardcoded to
+     (themes declare 40-42px), and scales live when a theme — custom or
+     built-in — changes --r-main-font-size. */
+  font-size: calc(var(--r-main-font-size, 40px) * .55);
   line-height: 1.4;
 }
 
@@ -925,6 +929,38 @@ body.light .sync-error { color: #b91c1c; }
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+
+/* Custom theme drawer — anchored right with a click-through backdrop so the
+   slide stays visible (and editable) while theme changes apply live. */
+.theme-modal {
+  background: transparent;
+  pointer-events: none;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex-direction: row;
+}
+.theme-card {
+  pointer-events: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  width: min(400px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+.color-pair { display: inline-flex; align-items: center; gap: 6px; }
+.color-pair input[type=color] {
+  width: 28px;
+  height: 24px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  cursor: pointer;
+}
+.color-pair input[type=text] { width: 150px; min-width: 0; }
+#btn-theme-edit { padding: 2px 7px; }
 
 /* About modal */
 .about-modal {
