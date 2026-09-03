@@ -2,7 +2,7 @@
 (async () => {
   'use strict';
 
-  const APP_VERSION = '1.1.0'; // semver — single source of truth for the About modal
+  const APP_VERSION = '1.2.0'; // semver — single source of truth for the About modal
   const REVEAL_VERSION = '5.1.0';
   const LIBRARY_KEY = 'reveal-editor:library:v1';
   const LEGACY_STORAGE_KEY = 'reveal-editor:project:v1';
